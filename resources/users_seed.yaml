@@ -1,0 +1,69 @@
+users:
+  - username: receptionist
+    full_name: Mariana Costa Almeida
+    role: receptionist
+    password: Recep2026!
+    attributes:
+      - role.receptionist
+      - department.frontdesk
+      - clearance.demographics
+      - epoch.2026
+
+  - username: nurse
+    full_name: Fernanda Souza Lima
+    role: nurse
+    password: Nurse2026!
+    attributes:
+      - role.nurse
+      - department.nursing
+      - clearance.demographics
+      - clearance.clinical_notes
+      - epoch.2026
+
+  - username: doctor_general_clinic
+    full_name: Dr. Ricardo Pereira Santos
+    role: doctor_general_clinic
+    password: DocGeral2026!
+    attributes:
+      - role.doctor
+      - specialty.general_clinic
+      - department.clinic
+      - clearance.demographics
+      - clearance.clinical_notes
+      - clearance.medications
+      - epoch.2026
+
+  - username: doctor_cardiologist
+    full_name: Dra. Camila Nogueira Araujo
+    role: doctor_cardiologist
+    password: Cardio2026!
+    attributes:
+      - role.doctor
+      - specialty.cardiology
+      - department.cardiology
+      - clearance.demographics
+      - clearance.clinical_notes
+      - clearance.medications
+      - clearance.labs
+      - epoch.2026
+
+  - username: medical_laboratory_technician
+    full_name: Lucas Henrique Ribeiro
+    role: medical_laboratory_technician
+    password: LabTech2026!
+    attributes:
+      - role.lab_technician
+      - department.laboratory
+      - clearance.labs
+      - epoch.2026
+
+  - username: medical_laboratory_scientist
+    full_name: Patricia Gomes Fernandes
+    role: medical_laboratory_scientist
+    password: LabSci2026!
+    attributes:
+      - role.lab_scientist
+      - department.laboratory
+      - clearance.labs
+      - clearance.clinical_notes
+      - epoch.2026

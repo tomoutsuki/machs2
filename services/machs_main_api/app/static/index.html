@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MACHS2 MVP UI</title>
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <h1>MACHS2 Local MVP</h1>
+      <p>Research UI for encryption mode comparison and policy-denial experiments.</p>
+
+      <section class="card">
+        <h2>1) Login</h2>
+        <form id="login-form">
+          <input id="username" placeholder="username" value="doctor_general_clinic" />
+          <input id="password" type="password" placeholder="password" value="DocGeral2026!" />
+          <button type="submit">Login</button>
+        </form>
+        <pre id="me"></pre>
+      </section>
+
+      <section class="card">
+        <h2>2) Create FHIR Resource</h2>
+        <label>Mode</label>
+        <select id="mode">
+          <option value="fabeo">fabeo</option>
+          <option value="aes_gcm">aes_gcm</option>
+          <option value="tde">tde</option>
+          <option value="column_level">column_level</option>
+          <option value="app_level">app_level</option>
+        </select>
+        <label>Policy (optional)</label>
+        <input id="policy" placeholder="role.doctor AND clearance.clinical_notes AND epoch.2026" />
+        <textarea id="resource-json" rows="12"></textarea>
+        <button id="create-entry">Create Entry</button>
+        <pre id="create-out"></pre>
+      </section>
+
+      <section class="card">
+        <h2>3) Search by blind-indexed fields</h2>
+        <input id="search-name" placeholder="name" />
+        <input id="search-cpf" placeholder="cpf" />
+        <input id="search-birthdate" placeholder="birthdate YYYY-MM-DD" />
+        <button id="search-btn">Search</button>
+        <pre id="search-out"></pre>
+      </section>
+
+      <section class="card">
+        <h2>4) Decrypt package</h2>
+        <input id="entry-id" placeholder="entry UUID" />
+        <button id="decrypt-btn">Get Decrypt Package</button>
+        <button id="run-client-decrypt">Run Client Decrypt (AES modes)</button>
+        <pre id="decrypt-out"></pre>
+      </section>
+    </main>
+
+    <script src="/ui/app.js"></script>
+  </body>
+</html>

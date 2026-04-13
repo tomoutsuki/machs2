@@ -1,0 +1,8 @@
+{
+  "resourceType": "Patient",
+  "id": "patient-02",
+  "name": [{"use": "official", "family": "Santos", "given": ["Maria", "Clara"]}],
+  "identifier": [{"system": "https://saude.gov.br/fhir/sid/cpf", "value": "98765432100"}],
+  "gender": "female",
+  "birthDate": "1985-04-11"
+}

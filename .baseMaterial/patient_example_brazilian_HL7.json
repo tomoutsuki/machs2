@@ -1,0 +1,129 @@
+{
+  "resourceType" : "Patient",
+  "id" : "b1997888-85fd-41b6-bf94-6242cf3c8265",
+  "language" : "pt-BR",
+  "text" : {
+    "status" : "generated",
+    "div" : "<div xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"pt-BR\" lang=\"pt-BR\"><p class=\"res-header-id\"><b>Narrativa gerada: Patient b1997888-85fd-41b6-bf94-6242cf3c8265</b></p><a name=\"b1997888-85fd-41b6-bf94-6242cf3c8265\"> </a><a name=\"hcb1997888-85fd-41b6-bf94-6242cf3c8265\"> </a><div style=\"display: inline-block; background-color: #d9e0e7; padding: 6px; margin: 4px; border: 1px solid #8da1b4; border-radius: 5px; line-height: 60%\"><p style=\"margin-bottom: 0px\">Língua: pt-BR</p></div><p style=\"border: 1px #661aff solid; background-color: #e6e6ff; padding: 10px;\">Ana Beatriz Oliveira (official) Female, DoB: 2018-09-25 ( Health Card Number: NamingSystemCNS#765432109876543\u00a0(use:\u00a0official,\u00a0))</p><hr/><table class=\"grid\"><tr><td style=\"background-color: #f3f5da\" title=\"Other Id (see the one above)\">Other Id:</td><td colspan=\"3\">Tax ID number/34567890123\u00a0(utilização:\u00a0official,\u00a0)</td></tr><tr><td style=\"background-color: #f3f5da\" title=\"Formas de contactar o doente\">Detalhes do contacto</td><td colspan=\"3\"><ul><li><a href=\"tel:+553199876-5432\">+55 31 99876-5432</a></li><li>Rua da Bahia, 300, Centro, Belo Horizonte, MG, 30160-010(home)</li></ul></td></tr><tr><td style=\"background-color: #f3f5da\" title=\"Contacto nomeado: mother\">mother:</td><td colspan=\"3\"><ul><li>Juliana Cristina Oliveira (Official) (Female)</li><li>Rua da Bahia, 300, Centro, Belo Horizonte, MG, 30160-010(home)</li><li><a href=\"tel:+553199765-4321\">+55 31 99765-4321</a></li><li><a href=\"mailto:juliana.oliveira@example.com\">juliana.oliveira@example.com</a></li></ul></td></tr><tr><td style=\"background-color: #f3f5da\" title=\"The registered place of birth of the patient. A sytem may use the address.text if they don't store the birthPlace address in discrete elements.\"><a href=\"http://hl7.org/fhir/extensions/5.2.0/StructureDefinition-patient-birthPlace.html\">Patient Birth Place</a></td><td colspan=\"3\">Belo Horizonte MG Brasil </td></tr><tr><td style=\"background-color: #f3f5da\" title=\"Elemento que define a raça do indivíduo\"><a href=\"https://ips.saude.gov.br/fhir/v1.0.0/StructureDefinition-raca-br-ips.html\">Raça BR IPS</a></td><td colspan=\"3\"><span title=\"Códigos:{https://terminologia.saude.gov.br/fhir/CodeSystem/BRRacaCor 02}\">Preta</span></td></tr><tr><td style=\"background-color: #f3f5da\" title=\"Elemento que define o sexo no nascimento do paciente\"><a href=\"https://ips.saude.gov.br/fhir/v1.0.0/StructureDefinition-sexo-nascimento-br-ips.html\">Sexo no nascimento BR IPS</a></td><td colspan=\"3\"><span title=\"Códigos:{http://hl7.org/fhir/administrative-gender female}\">Female</span></td></tr><tr><td style=\"background-color: #f3f5da\" title=\"The gender the patient identifies with. The Patient's gender identity is used as guidance (e.g. for staff) about how to interact with the patient.\"><a href=\"http://hl7.org/fhir/extensions/5.2.0/StructureDefinition-patient-genderIdentity.html\">Gender Identity</a></td><td colspan=\"3\"><span title=\"Códigos:{http://snomed.info/sct 446141000124107}\">Identifies as female gender (finding)</span></td></tr></table></div>"
+  },
+  "extension" : [{
+    "url" : "http://hl7.org/fhir/StructureDefinition/patient-birthPlace",
+    "valueAddress" : {
+      "city" : "Belo Horizonte",
+      "state" : "MG",
+      "country" : "Brasil"
+    }
+  },
+  {
+    "url" : "http://hl7.org/fhir/StructureDefinition/patient-genderIdentity",
+    "valueCodeableConcept" : {
+      "coding" : [{
+        "system" : "http://snomed.info/sct",
+        "code" : "446141000124107",
+        "display" : "Identifies as female gender (finding)"
+      }]
+    }
+  },
+  {
+    "url" : "https://ips.saude.gov.br/fhir/StructureDefinition/raca-br-ips",
+    "valueCodeableConcept" : {
+      "coding" : [{
+        "system" : "https://terminologia.saude.gov.br/fhir/CodeSystem/BRRacaCor",
+        "code" : "02",
+        "display" : "Preta"
+      }]
+    }
+  },
+  {
+    "url" : "https://ips.saude.gov.br/fhir/StructureDefinition/sexo-nascimento-br-ips",
+    "valueCodeableConcept" : {
+      "coding" : [{
+        "system" : "http://hl7.org/fhir/administrative-gender",
+        "code" : "female",
+        "display" : "Female"
+      }]
+    }
+  }],
+  "identifier" : [{
+    "use" : "official",
+    "type" : {
+      "coding" : [{
+        "system" : "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code" : "TAX",
+        "display" : "Tax ID number"
+      }]
+    },
+    "system" : "https://saude.gov.br/fhir/sid/cpf",
+    "value" : "34567890123"
+  },
+  {
+    "use" : "official",
+    "type" : {
+      "coding" : [{
+        "system" : "http://terminology.hl7.org/CodeSystem/v2-0203",
+        "code" : "HC",
+        "display" : "Health Card Number"
+      }]
+    },
+    "system" : "https://saude.gov.br/fhir/sid/cns",
+    "value" : "765432109876543"
+  }],
+  "name" : [{
+    "use" : "official",
+    "family" : "Oliveira",
+    "given" : ["Ana",
+    "Beatriz"]
+  }],
+  "telecom" : [{
+    "system" : "phone",
+    "value" : "+55 31 99876-5432",
+    "use" : "mobile"
+  }],
+  "gender" : "female",
+  "birthDate" : "2018-09-25",
+  "address" : [{
+    "use" : "home",
+    "type" : "both",
+    "text" : "Rua da Bahia, 300, Centro, Belo Horizonte, MG, 30160-010",
+    "line" : ["Rua da Bahia, 300"],
+    "city" : "Belo Horizonte",
+    "state" : "MG",
+    "postalCode" : "30160-010",
+    "country" : "Brasil"
+  }],
+  "contact" : [{
+    "relationship" : [{
+      "coding" : [{
+        "system" : "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+        "code" : "MTH",
+        "display" : "mother"
+      }]
+    }],
+    "name" : {
+      "use" : "official",
+      "family" : "Oliveira",
+      "given" : ["Juliana",
+      "Cristina"]
+    },
+    "telecom" : [{
+      "system" : "phone",
+      "value" : "+55 31 99765-4321",
+      "use" : "mobile"
+    },
+    {
+      "system" : "email",
+      "value" : "juliana.oliveira@example.com",
+      "use" : "home"
+    }],
+    "address" : {
+      "use" : "home",
+      "text" : "Rua da Bahia, 300, Centro, Belo Horizonte, MG, 30160-010",
+      "line" : ["Rua da Bahia, 300"],
+      "city" : "Belo Horizonte",
+      "state" : "MG",
+      "postalCode" : "30160-010",
+      "country" : "Brasil"
+    },
+    "gender" : "female"
+  }]
+}

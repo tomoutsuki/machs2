@@ -1,0 +1,54 @@
+:root {
+  --bg: #f5f7fb;
+  --ink: #1e2633;
+  --accent: #0f8b8d;
+  --card: #ffffff;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at 10% 10%, #d8eef5 0, #f5f7fb 30%), #f5f7fb;
+  color: var(--ink);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+.shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid #d9dfea;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 14px 0;
+}
+
+input,
+select,
+textarea,
+button {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 6px 0;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #c7d0e0;
+}
+
+button {
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+
+pre {
+  background: #f0f3f8;
+  border-radius: 8px;
+  padding: 10px;
+  overflow-x: auto;
+}

@@ -1,0 +1,136 @@
+services:
+  machs_postgresql:
+    image: postgres:16
+    container_name: machs_postgresql
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - machs_postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+      - ./resources:/workspace/resources:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks:
+      - machs_network
+
+  machs_minimal_kms:
+    build:
+      context: ./services/machs_minimal_kms
+    container_name: machs_minimal_kms
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      KMS_HOST: ${KMS_HOST}
+      KMS_PORT: ${KMS_PORT}
+      KMS_INTERNAL_TOKEN: ${KMS_INTERNAL_TOKEN}
+      KMS_MSK_B64: ${KMS_MSK_B64}
+      KMS_MQK_B64: ${KMS_MQK_B64}
+      KMS_MPK_B64: ${KMS_MPK_B64}
+      MAIN_API_ENABLE_EXPERIMENTAL_REVOCATION: ${MAIN_API_ENABLE_EXPERIMENTAL_REVOCATION}
+      MAIN_API_CURRENT_EPOCH: ${MAIN_API_CURRENT_EPOCH}
+    ports:
+      - "8100:8100"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8100/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - machs_network
+
+  machs_fabeo_service:
+    build:
+      context: ./services/machs_fabeo_service
+      dockerfile: Dockerfile
+    container_name: machs_fabeo_service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      FABEO_PORT: ${FABEO_PORT}
+      FABEO_MODE: ${FABEO_MODE}
+      FABEO_ALLOW_SIMULATION: ${FABEO_ALLOW_SIMULATION}
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./services/machs_fabeo_bridge:/opt/machs2/bridge:ro
+    command: ["python", "/opt/machs2/bridge/server.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib2; urllib2.urlopen('http://localhost:8200/health').read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - machs_network
+
+  machs_main_api:
+    build:
+      context: ./services/machs_main_api
+    container_name: machs_main_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MAIN_API_HOST: ${MAIN_API_HOST}
+      MAIN_API_PORT: ${MAIN_API_PORT}
+      MAIN_API_LOG_LEVEL: ${MAIN_API_LOG_LEVEL}
+      MAIN_API_JWT_SECRET: ${MAIN_API_JWT_SECRET}
+      MAIN_API_JWT_ALGORITHM: ${MAIN_API_JWT_ALGORITHM}
+      MAIN_API_JWT_EXP_MINUTES: ${MAIN_API_JWT_EXP_MINUTES}
+      MAIN_API_COOKIE_NAME: ${MAIN_API_COOKIE_NAME}
+      MAIN_API_COOKIE_SECURE: ${MAIN_API_COOKIE_SECURE}
+      MAIN_API_COOKIE_SAMESITE: ${MAIN_API_COOKIE_SAMESITE}
+      MAIN_API_RESET_ON_START: ${MAIN_API_RESET_ON_START}
+      MAIN_API_ALLOW_ORIGINS: ${MAIN_API_ALLOW_ORIGINS}
+      MAIN_API_ENABLE_EXPERIMENTAL_REVOCATION: ${MAIN_API_ENABLE_EXPERIMENTAL_REVOCATION}
+      MAIN_API_CURRENT_EPOCH: ${MAIN_API_CURRENT_EPOCH}
+      MAIN_API_POLICY_STRICT: ${MAIN_API_POLICY_STRICT}
+      MAIN_API_APP_ENVELOPE_KEY_B64: ${MAIN_API_APP_ENVELOPE_KEY_B64}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      KMS_HOST: ${KMS_HOST}
+      KMS_PORT: ${KMS_PORT}
+      KMS_INTERNAL_TOKEN: ${KMS_INTERNAL_TOKEN}
+      FABEO_HOST: ${FABEO_HOST}
+      FABEO_PORT: ${FABEO_PORT}
+      FABEO_MODE: ${FABEO_MODE}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./resources:/workspace/resources:ro
+    depends_on:
+      machs_postgresql:
+        condition: service_healthy
+      machs_minimal_kms:
+        condition: service_healthy
+      machs_fabeo_service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - machs_network
+
+networks:
+  machs_network:
+    driver: bridge
+
+volumes:
+  machs_postgres_data:

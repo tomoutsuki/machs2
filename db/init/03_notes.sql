@@ -1,0 +1,9 @@
+-- Local MVP notes for comparison modes:
+-- 1) fabeo schema stores FABEO ciphertext bytes and policy metadata.
+-- 2) aes_gcm schema stores application-level envelope encryption fields.
+-- 3) tde schema uses same logical columns for fair benchmark shape.
+--    In this local setup, native cluster-wide TDE is represented as a comparison mode only.
+-- 4) column_level schema is used with per-column encrypted fields by main API.
+-- 5) app_level schema stores app-encrypted payload analogous to aes_gcm.
+--
+-- Deterministic reset-on-start is performed by machs_main_api startup routine.

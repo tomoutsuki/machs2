@@ -1,0 +1,11 @@
+{
+  "resourceType": "Observation",
+  "id": "observation-01",
+  "status": "final",
+  "code": {
+    "coding": [{"system": "http://loinc.org", "code": "2093-3", "display": "Cholesterol [Mass/volume] in Serum or Plasma"}]
+  },
+  "subject": {"reference": "Patient/patient-02"},
+  "effectiveDateTime": "2026-01-10T10:00:00Z",
+  "valueQuantity": {"value": 190, "unit": "mg/dL"}
+}

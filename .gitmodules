@@ -1,0 +1,3 @@
+[submodule "services/machs_fabeo_service"]
+	path = services/machs_fabeo_service
+	url = https://github.com/DoreenRiepel/FABEO
