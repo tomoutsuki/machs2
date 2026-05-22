@@ -17,7 +17,7 @@ router = APIRouter(prefix="/entries", tags=["entries"])
 
 
 class CreateEntryRequest(BaseModel):
-    mode: str = Field(pattern="^(fabeo|aes_gcm|tde|column_level|app_level)$")
+    mode: str = Field(default="fabeo", pattern="^fabeo$")
     resource: Dict[str, Any]
     policy_expression: Optional[str] = None
 
@@ -79,7 +79,7 @@ def create_entry(payload: CreateEntryRequest, user: dict = Depends(get_current_u
 
 @router.get("/search")
 def search_entries(
-    mode: str = Query(pattern="^(fabeo|aes_gcm|tde|column_level|app_level)$"),
+    mode: str = Query("fabeo", pattern="^fabeo$"),
     name: Optional[str] = None,
     cpf: Optional[str] = None,
     birthdate: Optional[str] = None,
@@ -118,7 +118,7 @@ def rotate_epoch(new_epoch: str, user: dict = Depends(get_current_user)) -> dict
 
 
 @router.get("/{entry_id}/cipher")
-def get_cipher(entry_id: uuid.UUID, mode: str = Query(pattern="^(fabeo|aes_gcm|tde|column_level|app_level)$"), user: dict = Depends(get_current_user)) -> dict:
+def get_cipher(entry_id: uuid.UUID, mode: str = Query("fabeo", pattern="^fabeo$"), user: dict = Depends(get_current_user)) -> dict:
     del user
     row = repository.get_entry(mode, str(entry_id))
     if not row:
@@ -134,7 +134,7 @@ def get_cipher(entry_id: uuid.UUID, mode: str = Query(pattern="^(fabeo|aes_gcm|t
 
 
 @router.post("/{entry_id}/decrypt-package")
-def decrypt_package(entry_id: uuid.UUID, mode: str = Query(pattern="^(fabeo|aes_gcm|tde|column_level|app_level)$"), user: dict = Depends(get_current_user)) -> dict:
+def decrypt_package(entry_id: uuid.UUID, mode: str = Query("fabeo", pattern="^fabeo$"), user: dict = Depends(get_current_user)) -> dict:
     row = repository.get_entry(mode, str(entry_id))
     if not row:
         raise HTTPException(status_code=404, detail="entry not found")

@@ -16,7 +16,7 @@ def main() -> None:
     create = doctor.post(
         BASE + "/entries",
         json={
-            "mode": "aes_gcm",
+            "mode": "fabeo",
             "resource": {
                 "resourceType": "Patient",
                 "id": "revocation-demo",
@@ -36,7 +36,7 @@ def main() -> None:
         print("rotation failed (expected if revocation disabled):", rotate.text)
         return
 
-    decrypt = doctor.post(BASE + "/entries/{0}/decrypt-package".format(entry_id), params={"mode": "aes_gcm"}, timeout=10)
+    decrypt = doctor.post(BASE + "/entries/{0}/decrypt-package".format(entry_id), params={"mode": "fabeo"}, timeout=10)
     print("decrypt status after rotation:", decrypt.status_code)
     print(decrypt.text)
 

@@ -2,7 +2,7 @@
 
 ## 1. Purpose and Scope
 
-MACHS2 is a local research MVP to compare encrypted EHR storage strategies while preserving HL7 FHIR R5 JSON payload semantics.
+MACHS2 is a local research MVP to validate FABEO-based ABAC while preserving HL7 FHIR R5 JSON payload semantics.
 
 The project is intentionally modular:
 
@@ -25,7 +25,7 @@ Docker Compose defines four services connected on a single bridge network (`mach
 	- issue/validate session cookie (JWT)
 	- create/search/read/decrypt-package endpoints
 	- policy normalization/evaluation
-	- encryption mode dispatch (`fabeo`, `aes_gcm`, `tde`, `column_level`, `app_level`)
+	- FABEO encryption orchestration
 - Dependencies: PostgreSQL, KMS, FABEO bridge (via `depends_on` health checks)
 - Mounted volume: `./resources` (read-only) for deterministic startup seeding
 
@@ -54,7 +54,7 @@ Docker Compose defines four services connected on a single bridge network (`mach
 - Responsibilities:
 	- users and session references
 	- policy examples
-	- encrypted entries split by mode schema
+	- encrypted entries stored in `fabeo.entries`
 - Initialization scripts loaded from `db/init`
 
 ## 3. Inter-Module Communication
@@ -89,24 +89,22 @@ Docker Compose defines four services connected on a single bridge network (`mach
 1. Validate FHIR payload shape and supported `resourceType`.
 2. Normalize and extract searchable fields (name, CPF, birthdate for Patient).
 3. Request blind indexes from KMS for each available normalized field.
-4. Encrypt payload using selected mode.
-5. Insert encrypted row into mode-specific schema table.
+4. Encrypt payload using FABEO.
+5. Insert encrypted row into `fabeo.entries`.
 
 ### 4.3 Search flow
 
 1. Normalize search inputs.
 2. Derive blind indexes via KMS.
-3. Query mode-specific table by blind index columns (`OR` combination).
+3. Query `fabeo.entries` by blind index columns (`OR` combination).
 4. Return metadata only (no plaintext payload).
 
 ### 4.4 Decrypt-package flow
 
-1. Load row from selected mode table.
+1. Load row from `fabeo.entries`.
 2. Check epoch staleness when experimental revocation is enabled.
 3. Evaluate policy expression against authenticated user attributes.
-4. If authorized, produce decrypt package:
-	 - `fabeo`: server returns plaintext JSON directly in `result.resource_json`
-	 - AES-family modes: server returns key+cipher material for client-side AES-GCM decryption
+4. If authorized, return plaintext JSON in `result.resource_json`.
 
 ## 5. Storage Model
 
@@ -116,17 +114,11 @@ Docker Compose defines four services connected on a single bridge network (`mach
 - `public.session_usk`: session-bound USK reference with expiration
 - `public.policy_examples`: policy catalog exposed by API
 
-## 5.2 Mode schemas
+## 5.2 FABEO schema
 
-The following schemas are created with identical `entries` table shape:
+The `fabeo` schema contains a single `entries` table.
 
-- `fabeo`
-- `aes_gcm`
-- `tde`
-- `column_level`
-- `app_level`
-
-Common columns in `<schema>.entries`:
+Common columns in `fabeo.entries`:
 
 - `entry_id` (UUID, PK)
 - `resource_type`
@@ -135,30 +127,16 @@ Common columns in `<schema>.entries`:
 - `owner_username`
 - `bidx_name`, `bidx_cpf`, `bidx_birthdate` (blind-index fields)
 - `encrypted_payload` (BYTEA)
-- `iv`, `auth_tag`, `wrapped_key` (BYTEA, mode-dependent)
-- `wrapped_key_meta` (JSONB)
 - `mode_meta` (JSONB)
 - timestamps (`created_at`, `updated_at`)
 
 Indexes exist for blind-index columns, resource type, and created-at.
 
-## 6. Cryptographic Mode Behavior in This MVP
-
-### 6.1 `fabeo`
+## 6. Cryptographic Behavior in This MVP
 
 - Encryption/decryption delegated to FABEO bridge service.
 - Bridge validates policy syntax and enforces attribute checks on decrypt.
 - In current local setup, payload is wrapped in deterministic simulation envelope for reproducibility.
-
-### 6.2 `aes_gcm`, `tde`, `column_level`, `app_level`
-
-- Payload encrypted with random data key using AES-256-GCM (`aad = machs2-ehr`).
-- Data key wrapped by app envelope key using AES-256-GCM (`aad = machs2-wrap`).
-- Decrypt-package returns base64 fields needed by browser WebCrypto to decrypt client-side.
-
-Important for interpretation:
-
-- `tde`, `column_level`, and `app_level` are represented for local comparability and share this envelope path in the current MVP code.
 
 ## 7. Policy and Attribute Engine
 
@@ -184,10 +162,10 @@ This is a research simulation of revocation semantics, not full production key-r
 
 When `MAIN_API_RESET_ON_START=true`:
 
-1. all entries in every mode schema are cleared
+1. all entries in `fabeo.entries` are cleared
 2. all session references are cleared
 3. users from `resources/users_seed.yaml` are upserted
-4. resource seed files are encrypted and inserted in all modes
+4. resource seed files are encrypted and inserted in `fabeo` only
 
 This ensures repeatable behavior for demos, benchmarks, and integration scripts.
 

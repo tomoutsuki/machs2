@@ -19,7 +19,7 @@ Out of scope:
 ### 2.1 Sensitive assets
 
 - encrypted FHIR payloads (`<mode>.entries.encrypted_payload`)
-- decrypt material in decrypt-package responses
+- decrypted plaintext in decrypt-package responses
 - session USK references (`public.session_usk`)
 - KMS secrets (MSK, MQK)
 - blind-index outputs used for lookup
@@ -47,7 +47,7 @@ Out of scope:
 
 ### 4.2 Partially trusted or exposed components
 
-- Browser client: receives decrypt package for AES-family flows
+- Browser client: receives server-decrypted plaintext for authorized sessions
 - FABEO bridge: policy-bound operation, simulation mode in local MVP
 
 ### 4.3 Untrusted for plaintext confidentiality
@@ -135,7 +135,7 @@ Expected result:
 
 ## 7. Known Weaknesses and Residual Risks
 
-- AES-family decrypt package includes data key to client in this MVP flow; appropriate for local evaluation, not production-safe key delivery design.
+- Decrypt-package returns plaintext from server-side FABEO flow; avoid exposing this outside trusted clients.
 - Policy evaluator is simplified and does not implement full boolean precedence semantics.
 - FABEO bridge currently runs simulation envelope for reproducibility.
 - Internal token model is static and environment-based.

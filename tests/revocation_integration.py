@@ -16,7 +16,7 @@ def main() -> None:
     c = doctor.post(
         BASE + "/entries",
         json={
-            "mode": "aes_gcm",
+            "mode": "fabeo",
             "resource": {
                 "resourceType": "Patient",
                 "id": "rev-integration",
@@ -36,7 +36,7 @@ def main() -> None:
         print("revocation mode likely disabled; skipping denial assertion")
         return
 
-    d = doctor.post(BASE + "/entries/{0}/decrypt-package".format(entry_id), params={"mode": "aes_gcm"}, timeout=10)
+    d = doctor.post(BASE + "/entries/{0}/decrypt-package".format(entry_id), params={"mode": "fabeo"}, timeout=10)
     assert d.status_code == 403, d.text
     print("revocation integration pass")
 

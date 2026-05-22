@@ -9,7 +9,7 @@
   <body>
     <main class="shell">
       <h1>MACHS2 Local MVP</h1>
-      <p>Research UI for encryption mode comparison and policy-denial experiments.</p>
+      <p>Research UI for FABEO policy-denial experiments.</p>
 
       <section class="card">
         <h2>1) Login</h2>
@@ -23,14 +23,7 @@
 
       <section class="card">
         <h2>2) Create FHIR Resource</h2>
-        <label>Mode</label>
-        <select id="mode">
-          <option value="fabeo">fabeo</option>
-          <option value="aes_gcm">aes_gcm</option>
-          <option value="tde">tde</option>
-          <option value="column_level">column_level</option>
-          <option value="app_level">app_level</option>
-        </select>
+        <p><strong>Mode:</strong> fabeo (fixed)</p>
         <label>Policy (optional)</label>
         <input id="policy" placeholder="role.doctor AND clearance.clinical_notes AND epoch.2026" />
         <textarea id="resource-json" rows="12"></textarea>
@@ -51,7 +44,6 @@
         <h2>4) Decrypt package</h2>
         <input id="entry-id" placeholder="entry UUID" />
         <button id="decrypt-btn">Get Decrypt Package</button>
-        <button id="run-client-decrypt">Run Client Decrypt (AES modes)</button>
         <pre id="decrypt-out"></pre>
       </section>
     </main>

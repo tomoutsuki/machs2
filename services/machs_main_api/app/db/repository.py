@@ -9,10 +9,6 @@ from app.db.database import get_cursor
 
 SCHEMA_BY_MODE = {
     "fabeo": "fabeo",
-    "aes_gcm": "aes_gcm",
-    "tde": "tde",
-    "column_level": "column_level",
-    "app_level": "app_level",
 }
 
 
@@ -130,8 +126,7 @@ def get_entry(mode: str, entry_id: str) -> Optional[Dict[str, Any]]:
 
 def clear_all_entries() -> None:
     with get_cursor(commit=True) as cur:
-        for schema in SCHEMA_BY_MODE.values():
-            cur.execute("DELETE FROM {schema}.entries".format(schema=schema))
+        cur.execute("DELETE FROM fabeo.entries")
         cur.execute("DELETE FROM public.session_usk")
 
 

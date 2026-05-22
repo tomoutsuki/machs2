@@ -1,10 +1,7 @@
-import json
-import time
-from typing import Optional
-
 import requests
 
 BASE_URL = "http://localhost:8000"
+MODE = "fabeo"
 
 
 def login(username: str, password: str) -> requests.Session:
@@ -14,7 +11,7 @@ def login(username: str, password: str) -> requests.Session:
     return s
 
 
-def create_patient(session: requests.Session, mode: str) -> str:
+def create_patient(session: requests.Session, mode: str = MODE) -> str:
     payload = {
         "mode": mode,
         "resource": {
@@ -35,11 +32,11 @@ def test_search_allowed_decrypt_denied() -> None:
     doctor = login("doctor_general_clinic", "DocGeral2026!")
     nurse = login("nurse", "Nurse2026!")
 
-    entry_id = create_patient(doctor, "aes_gcm")
-    sr = nurse.get(BASE_URL + "/entries/search", params={"mode": "aes_gcm", "cpf": "11122233344"}, timeout=10)
+    entry_id = create_patient(doctor)
+    sr = nurse.get(BASE_URL + "/entries/search", params={"mode": MODE, "cpf": "11122233344"}, timeout=10)
     assert sr.status_code == 200, sr.text
 
-    dr = nurse.post(BASE_URL + "/entries/{0}/decrypt-package".format(entry_id), params={"mode": "aes_gcm"}, timeout=10)
+    dr = nurse.post(BASE_URL + "/entries/{0}/decrypt-package".format(entry_id), params={"mode": MODE}, timeout=10)
     assert dr.status_code == 403, dr.text
     print("PASS: search allowed but decrypt denied")
 
@@ -48,8 +45,8 @@ def test_policy_mismatch_fabeo() -> None:
     doctor = login("doctor_general_clinic", "DocGeral2026!")
     recep = login("receptionist", "Recep2026!")
 
-    entry_id = create_patient(doctor, "fabeo")
-    dr = recep.post(BASE_URL + "/entries/{0}/decrypt-package".format(entry_id), params={"mode": "fabeo"}, timeout=10)
+    entry_id = create_patient(doctor)
+    dr = recep.post(BASE_URL + "/entries/{0}/decrypt-package".format(entry_id), params={"mode": MODE}, timeout=10)
     assert dr.status_code == 403, dr.text
     print("PASS: FABEO policy mismatch denied")
 

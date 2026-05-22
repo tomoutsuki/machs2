@@ -7,34 +7,9 @@
       "read_latency_ms_avg": 77.16246666920294,
       "decrypt_latency_ms_avg": 84.53593333494307,
       "storage_overhead_bytes_avg": 273
-    },
-    "aes_gcm": {
-      "write_latency_ms_avg": 467.0118666666288,
-      "read_latency_ms_avg": 94.91349999977199,
-      "decrypt_latency_ms_avg": 70.64819999989898,
-      "storage_overhead_bytes_avg": 291
-    },
-    "tde": {
-      "write_latency_ms_avg": 498.1824333347807,
-      "read_latency_ms_avg": 119.26186666581391,
-      "decrypt_latency_ms_avg": 102.14640000049258,
-      "storage_overhead_bytes_avg": 287
-    },
-    "column_level": {
-      "write_latency_ms_avg": 442.5687333350652,
-      "read_latency_ms_avg": 130.77830000111135,
-      "decrypt_latency_ms_avg": 108.99949999778376,
-      "storage_overhead_bytes_avg": 296
-    },
-    "app_level": {
-      "write_latency_ms_avg": 538.6599666671827,
-      "read_latency_ms_avg": 79.67783333151601,
-      "decrypt_latency_ms_avg": 67.39229999948293,
-      "storage_overhead_bytes_avg": 293
     }
   },
   "notes": [
-    "CPU/memory observations should be captured from docker stats during benchmark run.",
-    "TDE mode is represented as local comparison mode in this MVP."
+    "CPU/memory observations should be captured from docker stats during benchmark run."
   ]
 }

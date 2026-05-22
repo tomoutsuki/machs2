@@ -21,13 +21,9 @@ No registration endpoint exists. Users are loaded from `resources/users_seed.yam
 
 ### 2.1 Encryption mode
 
-Accepted mode values:
+Accepted mode value:
 
 - `fabeo`
-- `aes_gcm`
-- `tde`
-- `column_level`
-- `app_level`
 
 Used by:
 
@@ -160,7 +156,7 @@ Request body:
 
 ```json
 {
-  "mode": "aes_gcm",
+  "mode": "fabeo",
   "resource": {
     "resourceType": "Patient",
     "id": "demo-1",
@@ -174,7 +170,7 @@ Request body:
 
 Fields:
 
-- `mode` (required): one of accepted mode values
+- `mode` (optional, default `fabeo`): must be `fabeo`
 - `resource` (required): FHIR JSON object
 - `policy_expression` (optional): if omitted, API chooses resource-type default policy
 
@@ -183,7 +179,7 @@ Success response (`200`):
 ```json
 {
   "entry_id": "<uuid>",
-  "mode": "aes_gcm",
+  "mode": "fabeo",
   "resource_type": "Patient",
   "policy_expression": "role.doctor AND clearance.demographics AND epoch.2026"
 }
@@ -199,8 +195,8 @@ Internal processing summary:
 1. validate FHIR baseline
 2. derive normalized fields (name, CPF, birthdate when available)
 3. request blind indexes from KMS
-4. encrypt payload per mode
-5. store metadata + ciphertext in mode schema table
+4. encrypt payload with FABEO
+5. store metadata + ciphertext in `fabeo.entries`
 
 ### 5.2 `GET /entries/search`
 
@@ -208,7 +204,7 @@ Search metadata by blind indexes.
 
 Query parameters:
 
-- `mode` (required)
+- `mode` (optional, default `fabeo`)
 - `name` (optional)
 - `cpf` (optional)
 - `birthdate` (optional)
@@ -228,8 +224,8 @@ Response example (`200`):
       "epoch_label": "epoch.2026",
       "owner_username": "doctor_general_clinic",
       "mode_meta": {
-        "mode_family": "aes_gcm_envelope",
-        "requested_mode": "aes_gcm"
+        "fabeo_mode": "fabeo22cp",
+        "simulated": true
       },
       "created_at": "2026-04-24T..."
     }
@@ -252,7 +248,7 @@ Path parameters:
 
 Query parameters:
 
-- `mode` (required)
+- `mode` (optional, default `fabeo`)
 
 Success response (`200`):
 
@@ -263,8 +259,8 @@ Success response (`200`):
   "policy_expression": "role.doctor AND clearance.demographics AND epoch.2026",
   "epoch_label": "epoch.2026",
   "mode_meta": {
-    "mode_family": "aes_gcm_envelope",
-    "requested_mode": "aes_gcm"
+    "fabeo_mode": "fabeo22cp",
+    "simulated": true
   }
 }
 ```
@@ -275,7 +271,7 @@ Errors:
 
 ### 5.4 `POST /entries/{entry_id}/decrypt-package`
 
-Authorize and produce decryption material.
+Authorize and return decrypted payload.
 
 Path parameters:
 
@@ -283,14 +279,14 @@ Path parameters:
 
 Query parameters:
 
-- `mode` (required)
+- `mode` (optional, default `fabeo`)
 
 Authorization checks:
 
 1. row exists
 2. if revocation enabled: row epoch must equal current epoch
 3. user attributes must satisfy policy expression
-4. mode-specific decrypt package generation succeeds
+4. FABEO decrypt package generation succeeds
 
 #### Success response shape for `fabeo`
 
@@ -307,31 +303,11 @@ Authorization checks:
 }
 ```
 
-#### Success response shape for AES-family modes
-
-```json
-{
-  "entry_id": "<uuid>",
-  "mode": "aes_gcm",
-  "policy_expression": "role.doctor AND clearance.demographics AND epoch.2026",
-  "result": {
-    "flow": "client_side_decrypt_simulated",
-    "client_decrypt_required": true,
-    "algorithm": "AES-256-GCM",
-    "aad": "bWFjaHMyLWVocg==",
-    "data_key_b64": "...",
-    "ciphertext_b64": "...",
-    "iv_b64": "...",
-    "tag_b64": "..."
-  }
-}
-```
-
 Errors:
 
 - `403 policy mismatch: decrypt denied`
 - `403 ciphertext stale epoch, re-encryption required`
-- `403` FABEO/mode-specific decryption error
+- `403` FABEO decryption error
 - `404 entry not found`
 
 ### 5.5 `GET /entries/meta/policies`
@@ -419,17 +395,17 @@ curl -X POST http://localhost:8000/auth/login \
 curl -X POST http://localhost:8000/entries \
   -H "Content-Type: application/json" \
   -b cookies.txt \
-  -d '{"mode":"aes_gcm","resource":{"resourceType":"Patient","id":"demo","name":[{"family":"Silva","given":["Ana"]}],"identifier":[{"system":"https://saude.gov.br/fhir/sid/cpf","value":"12345678901"}],"birthDate":"1990-01-01"}}'
+  -d '{"mode":"fabeo","resource":{"resourceType":"Patient","id":"demo","name":[{"family":"Silva","given":["Ana"]}],"identifier":[{"system":"https://saude.gov.br/fhir/sid/cpf","value":"12345678901"}],"birthDate":"1990-01-01"}}'
 ```
 
 ### 7.3 Search
 
 ```bash
-curl "http://localhost:8000/entries/search?mode=aes_gcm&cpf=12345678901" -b cookies.txt
+curl "http://localhost:8000/entries/search?mode=fabeo&cpf=12345678901" -b cookies.txt
 ```
 
 ### 7.4 Decrypt package
 
 ```bash
-curl -X POST "http://localhost:8000/entries/<ENTRY_ID>/decrypt-package?mode=aes_gcm" -b cookies.txt
+curl -X POST "http://localhost:8000/entries/<ENTRY_ID>/decrypt-package?mode=fabeo" -b cookies.txt
 ```

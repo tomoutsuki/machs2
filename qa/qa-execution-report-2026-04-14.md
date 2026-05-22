@@ -3,6 +3,7 @@
 Date: 2026-04-14
 Environment: Local Docker stack on Windows
 Scope: Checklist execution based on docs/qa-checklist.md
+Note: Updated to reflect FABEO-only scope.
 
 ## Overall Status
 
@@ -40,9 +41,9 @@ Scope: Checklist execution based on docs/qa-checklist.md
 - PASS: Unsupported resourceType returns 400.
 - PASS: Non-object resource rejected at request validation layer (422).
 
-### Encryption Mode Coverage
+### FABEO Mode Coverage
 
-For each mode fabeo, aes_gcm, tde, column_level, app_level:
+For mode fabeo:
 
 - PASS: Create entry returned 200.
 - PASS: Search by CPF returned 200 with count 1.
@@ -60,14 +61,14 @@ For each mode fabeo, aes_gcm, tde, column_level, app_level:
 
 ### Database and Seed Validation
 
-- PASS: Required schemas exist: fabeo, aes_gcm, tde, column_level, app_level.
+- PASS: Required schemas exist: fabeo.
 - PASS: policy_examples seeded count = 7.
 - PASS: users seeded count = 6.
-- PASS: Binary-safe plaintext marker spot-check found 0 matches in aes_gcm and fabeo payloads.
+- PASS: Binary-safe plaintext marker spot-check found 0 matches in fabeo payloads.
 
 ### Benchmark and Non-Functional
 
-- PASS: Benchmark executed for 15 iterations across all 5 modes.
+- PASS: Benchmark executed for 15 iterations for fabeo.
 - PASS: Benchmark artifacts generated:
   - scripts/benchmark/output/results.json
   - scripts/benchmark/output/summary.md
@@ -76,10 +77,6 @@ For each mode fabeo, aes_gcm, tde, column_level, app_level:
 Benchmark summary values:
 
 - fabeo: write 583.92 ms, read 78.75 ms, decrypt 89.01 ms, 273 bytes
-- aes_gcm: write 549.57 ms, read 90.21 ms, decrypt 89.32 ms, 291 bytes
-- tde: write 581.44 ms, read 83.20 ms, decrypt 59.05 ms, 287 bytes
-- column_level: write 531.31 ms, read 70.61 ms, decrypt 70.73 ms, 296 bytes
-- app_level: write 565.82 ms, read 68.31 ms, decrypt 61.39 ms, 293 bytes
 
 ## Partial or Blocked Items
 

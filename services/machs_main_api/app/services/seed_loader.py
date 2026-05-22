@@ -65,7 +65,7 @@ def _load_json_file(path: str) -> Optional[Dict]:
         return None
 
 
-def _seed_file_for_all_modes(resource: Dict, owner_username: str) -> None:
+def _seed_file_for_fabeo(resource: Dict, owner_username: str) -> None:
     valid, _ = fhir.validate_fhir_resource(resource)
     if not valid:
         return
@@ -74,26 +74,26 @@ def _seed_file_for_all_modes(resource: Dict, owner_username: str) -> None:
     policy = _choose_policy(resource["resourceType"])
     idx = _index_values(resource)
 
-    for mode in ["fabeo", "aes_gcm", "tde", "column_level", "app_level"]:
-        cipher = encrypt_payload(mode, resource_json, policy)
-        repository.insert_entry(
-            mode,
-            {
-                "resource_type": resource["resourceType"],
-                "policy_expression": policy,
-                "epoch_label": settings.current_epoch,
-                "owner_username": owner_username,
-                "bidx_name": idx["bidx_name"],
-                "bidx_cpf": idx["bidx_cpf"],
-                "bidx_birthdate": idx["bidx_birthdate"],
-                "encrypted_payload": cipher.encrypted_payload,
-                "iv": cipher.iv,
-                "auth_tag": cipher.auth_tag,
-                "wrapped_key": cipher.wrapped_key,
-                "wrapped_key_meta": cipher.wrapped_key_meta,
-                "mode_meta": cipher.mode_meta,
-            },
-        )
+    mode = "fabeo"
+    cipher = encrypt_payload(mode, resource_json, policy)
+    repository.insert_entry(
+        mode,
+        {
+            "resource_type": resource["resourceType"],
+            "policy_expression": policy,
+            "epoch_label": settings.current_epoch,
+            "owner_username": owner_username,
+            "bidx_name": idx["bidx_name"],
+            "bidx_cpf": idx["bidx_cpf"],
+            "bidx_birthdate": idx["bidx_birthdate"],
+            "encrypted_payload": cipher.encrypted_payload,
+            "iv": cipher.iv,
+            "auth_tag": cipher.auth_tag,
+            "wrapped_key": cipher.wrapped_key,
+            "wrapped_key_meta": cipher.wrapped_key_meta,
+            "mode_meta": cipher.mode_meta,
+        },
+    )
 
 
 def load_resource_seeds(owner_username: str = "doctor_general_clinic") -> None:
@@ -110,7 +110,7 @@ def load_resource_seeds(owner_username: str = "doctor_general_clinic") -> None:
     for path in paths:
         payload = _load_json_file(path)
         if payload:
-            _seed_file_for_all_modes(payload, owner_username)
+            _seed_file_for_fabeo(payload, owner_username)
 
 
 def deterministic_reset_and_seed() -> None:

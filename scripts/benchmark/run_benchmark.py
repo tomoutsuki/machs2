@@ -10,7 +10,7 @@ USERS = {
     "doctor_general_clinic": "DocGeral2026!",
 }
 
-MODES = ["fabeo", "aes_gcm", "tde", "column_level", "app_level"]
+MODES = ["fabeo"]
 
 
 def login(base_url: str) -> requests.Session:
@@ -85,7 +85,6 @@ def main() -> None:
         "modes": {},
         "notes": [
             "CPU/memory observations should be captured from docker stats during benchmark run.",
-            "TDE mode is represented as local comparison mode in this MVP.",
         ],
     }
 

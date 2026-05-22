@@ -23,7 +23,7 @@ def main() -> None:
             )
         )
 
-    lines.extend(["", "## Notes", "- CPU/memory: run `docker stats` while benchmark executes.", "- TDE is simulated for local comparability in this MVP."])
+    lines.extend(["", "## Notes", "- CPU/memory: run `docker stats` while benchmark executes."])
 
     with open(args.out, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))

@@ -2,7 +2,7 @@
 
 Modular Architecture for Cryptographic Control in Healthcare Systems (local MVP).
 
-This repository implements a local research environment to compare encrypted storage modes for HL7 FHIR R5 JSON resources.
+This repository implements a local research environment to validate FABEO-based ABAC for HL7 FHIR R5 JSON resources.
 
 ## Implemented Services
 
@@ -11,13 +11,11 @@ This repository implements a local research environment to compare encrypted sto
 - `machs_minimal_kms` (minimal KMS holding MSK/MQK)
 - `machs_postgresql` (PostgreSQL)
 
-## Encryption Modes Compared
+## Encryption Mode
+
+MACHS2 supports a single encryption mode for the TCC2 scope:
 
 - `fabeo` (FABEO CP-ABE bridge)
-- `aes_gcm` (AES-256-GCM envelope encryption)
-- `tde` (local comparison mode with documented simulation constraints)
-- `column_level` (column-level application-side encryption)
-- `app_level` (application-level encryption)
 
 ## FHIR Support
 
@@ -58,7 +56,6 @@ Forbidden syntax:
 - MSK/MQK never leave KMS
 - USK is issued per login session and stored only as session reference (never in EHR tables)
 - MPK is public endpoint output
-- blind indexes are HMAC-based for name/CPF/birthdate
 
 ## Predefined Users (No Registration)
 
@@ -145,18 +142,18 @@ Create encrypted entry:
 curl -X POST http://localhost:8000/entries \
 	-H "Content-Type: application/json" \
 	-b cookies.txt \
-	-d '{"mode":"aes_gcm","resource":{"resourceType":"Patient","id":"demo-1","name":[{"family":"Silva","given":["Ana"]}],"identifier":[{"system":"https://saude.gov.br/fhir/sid/cpf","value":"12345678901"}],"birthDate":"1990-01-01"}}'
+	-d '{"mode":"fabeo","resource":{"resourceType":"Patient","id":"demo-1","name":[{"family":"Silva","given":["Ana"]}],"identifier":[{"system":"https://saude.gov.br/fhir/sid/cpf","value":"12345678901"}],"birthDate":"1990-01-01"}}'
 ```
 
 Search via blind index input:
 
 ```bash
-curl "http://localhost:8000/entries/search?mode=aes_gcm&cpf=12345678901" -b cookies.txt
+curl "http://localhost:8000/entries/search?mode=fabeo&cpf=12345678901" -b cookies.txt
 ```
 
 ## Benchmarks
 
-Run benchmark comparison:
+Run benchmark:
 
 ```bash
 BENCHMARK_ITERATIONS=15 ./scripts/benchmark/run_benchmark.sh
@@ -192,8 +189,6 @@ python tests/integration_smoke.py
 
 - FABEO container is built from the upstream FABEO Dockerfile (Ubuntu 16.04 / Python 2.7 / Charm 0.43 compatibility assumptions).
 - A thin local HTTP bridge script is mounted into the FABEO container at runtime to expose `/encrypt`, `/decrypt`, and `/validate-policy` endpoints expected by `machs_main_api`.
-- Bridge mode currently keeps deterministic policy-bound ciphertext behavior for local comparison tests.
-- Local `tde` mode is a comparison representation; enterprise-grade native PostgreSQL TDE behavior is not fully reproduced here.
-- Client-side decrypt flow is implemented for AES modes with browser WebCrypto and server-delivered key material for MVP testing.
+- Bridge mode keeps deterministic policy-bound ciphertext behavior for local reproducibility tests.
 - Full FHIR profile validation beyond required checks is not implemented.
 - Local path names containing `#` may break Vite projects; this repository uses plain static UI to avoid that issue.

@@ -1,10 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE SCHEMA IF NOT EXISTS fabeo;
-CREATE SCHEMA IF NOT EXISTS aes_gcm;
-CREATE SCHEMA IF NOT EXISTS tde;
-CREATE SCHEMA IF NOT EXISTS column_level;
-CREATE SCHEMA IF NOT EXISTS app_level;
 
 CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -66,9 +62,5 @@ END;
 $$ LANGUAGE plpgsql;
 
 SELECT create_mode_table('fabeo');
-SELECT create_mode_table('aes_gcm');
-SELECT create_mode_table('tde');
-SELECT create_mode_table('column_level');
-SELECT create_mode_table('app_level');
 
 DROP FUNCTION create_mode_table(TEXT);
