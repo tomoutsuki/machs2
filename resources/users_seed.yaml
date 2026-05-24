@@ -1,5 +1,5 @@
 users:
-  - username: receptionist
+  - username: receptionist_frontdesk
     full_name: Mariana Costa Almeida
     role: receptionist
     password: Recep2026!
@@ -9,13 +9,13 @@ users:
       - clearance.demographics
       - epoch.2026
 
-  - username: nurse
+  - username: nurse_clinic
     full_name: Fernanda Souza Lima
     role: nurse
     password: Nurse2026!
     attributes:
       - role.nurse
-      - department.nursing
+      - department.clinic
       - clearance.demographics
       - clearance.clinical_notes
       - epoch.2026
@@ -45,6 +45,7 @@ users:
       - clearance.clinical_notes
       - clearance.medications
       - clearance.labs
+      - clearance.sensitive
       - epoch.2026
 
   - username: medical_laboratory_technician

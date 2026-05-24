@@ -1,4 +1,3 @@
-import base64
 import os
 from dataclasses import dataclass
 
@@ -47,10 +46,6 @@ class Settings:
 
     bcrypt_rounds: int = int(os.getenv("BCRYPT_ROUNDS", "12"))
 
-    app_envelope_key_b64: str = os.getenv(
-        "MAIN_API_APP_ENVELOPE_KEY_B64", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-    )
-
     @property
     def database_dsn(self) -> str:
         return (
@@ -70,13 +65,6 @@ class Settings:
     @property
     def fabeo_url(self) -> str:
         return "http://{0}:{1}".format(self.fabeo_host, self.fabeo_port)
-
-    @property
-    def app_envelope_key(self) -> bytes:
-        key = base64.b64decode(self.app_envelope_key_b64)
-        if len(key) != 32:
-            raise ValueError("MAIN_API_APP_ENVELOPE_KEY_B64 must decode to 32 bytes")
-        return key
 
 
 settings = Settings()

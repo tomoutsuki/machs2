@@ -8,7 +8,7 @@ import yaml
 from app.core.security import hash_password
 from app.core.settings import settings
 from app.db import repository
-from app.services import fhir, kms_client
+from app.services import fabeo_client, fhir, kms_client
 from app.services.crypto_modes import encrypt_payload
 
 
@@ -22,13 +22,13 @@ def _users_seed_path() -> str:
 
 def _choose_policy(resource_type: str) -> str:
     mapping = {
-        "Patient": "(role.receptionist OR role.nurse OR role.doctor) AND clearance.demographics AND epoch.2026",
-        "Observation": "(role.lab_technician OR role.lab_scientist OR role.doctor) AND clearance.labs AND epoch.2026",
-        "Condition": "(role.nurse OR role.doctor) AND clearance.clinical_notes AND epoch.2026",
-        "Encounter": "(role.nurse OR role.doctor) AND clearance.clinical_notes AND epoch.2026",
-        "MedicationRequest": "role.doctor AND clearance.medications AND epoch.2026",
+        "Patient": "(role.receptionist OR role.nurse OR role.doctor) AND clearance.demographics AND {epoch}",
+        "Observation": "(role.lab_technician OR role.lab_scientist OR role.doctor) AND clearance.labs AND {epoch}",
+        "Condition": "(role.nurse OR role.doctor) AND clearance.clinical_notes AND {epoch}",
+        "Encounter": "(role.nurse OR role.doctor) AND clearance.clinical_notes AND {epoch}",
+        "MedicationRequest": "role.doctor AND clearance.medications AND {epoch}",
     }
-    return mapping.get(resource_type, "role.doctor AND epoch.2026")
+    return mapping.get(resource_type, "role.doctor AND {epoch}").format(epoch=settings.current_epoch)
 
 
 def _index_values(resource: Dict) -> Dict[str, str]:
@@ -74,10 +74,9 @@ def _seed_file_for_fabeo(resource: Dict, owner_username: str) -> None:
     policy = _choose_policy(resource["resourceType"])
     idx = _index_values(resource)
 
-    mode = "fabeo"
-    cipher = encrypt_payload(mode, resource_json, policy)
+    policy = fabeo_client.validate_policy(policy)
+    cipher = encrypt_payload(resource_json, policy)
     repository.insert_entry(
-        mode,
         {
             "resource_type": resource["resourceType"],
             "policy_expression": policy,
@@ -92,7 +91,7 @@ def _seed_file_for_fabeo(resource: Dict, owner_username: str) -> None:
             "wrapped_key": cipher.wrapped_key,
             "wrapped_key_meta": cipher.wrapped_key_meta,
             "mode_meta": cipher.mode_meta,
-        },
+        }
     )
 
 

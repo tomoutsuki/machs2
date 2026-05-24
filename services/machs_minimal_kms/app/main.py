@@ -6,6 +6,7 @@ import secrets
 import time
 from typing import Dict
 
+import requests
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
@@ -17,12 +18,12 @@ def _b64_secret(env_name: str, fallback: bytes) -> bytes:
     return base64.b64decode(value)
 
 
-MSK = _b64_secret("KMS_MSK_B64", b"MACHS2_MSK_DEFAULT_2026")
 MQK = _b64_secret("KMS_MQK_B64", b"MACHS2_MQK_DEFAULT_2026")
-MPK = os.getenv("KMS_MPK_B64", "TUFDSFMyX01QS19ERUZBVUxUXzIwMjY=")
 INTERNAL_TOKEN = os.getenv("KMS_INTERNAL_TOKEN", "change_me_internal_token")
 CURRENT_EPOCH = os.getenv("MAIN_API_CURRENT_EPOCH", "epoch.2026")
 ENABLE_EXPERIMENTAL_REVOCATION = os.getenv("MAIN_API_ENABLE_EXPERIMENTAL_REVOCATION", "false").lower() == "true"
+FABEO_HOST = os.getenv("FABEO_HOST", "machs_fabeo_service")
+FABEO_PORT = int(os.getenv("FABEO_PORT", "8200"))
 
 app = FastAPI(title="machs_minimal_kms", version="0.1.0")
 
@@ -40,10 +41,11 @@ class SessionUskRequest(BaseModel):
     username: str
     attributes: list[str]
     session_id: str
+    epoch: str = Field(default=CURRENT_EPOCH)
 
 
 class SessionUskResponse(BaseModel):
-    usk: str
+    usk_ref: str
     expires_at_epoch_seconds: int
     issued_epoch: str
 
@@ -52,9 +54,28 @@ class EpochRotateRequest(BaseModel):
     new_epoch: str
 
 
+class UnwrapDekRequest(BaseModel):
+    usk_ref: str = Field(min_length=1)
+    wrapped_key_b64: str = Field(min_length=1)
+
+
+class UnwrapDekResponse(BaseModel):
+    dek_b64: str
+    policy: str
+    mode: str
+
+
 def verify_internal_token(x_internal_token: str = Header(default="")) -> None:
     if not secrets.compare_digest(x_internal_token, INTERNAL_TOKEN):
         raise HTTPException(status_code=403, detail="invalid internal token")
+
+
+def _bridge_headers() -> Dict[str, str]:
+    return {"x-internal-token": INTERNAL_TOKEN}
+
+
+def _bridge_url(path: str) -> str:
+    return "http://{0}:{1}{2}".format(FABEO_HOST, FABEO_PORT, path)
 
 
 def derive_blind_index(field: str, normalized_value: str) -> str:
@@ -63,21 +84,63 @@ def derive_blind_index(field: str, normalized_value: str) -> str:
     return digest
 
 
-def derive_usk(username: str, attributes: list[str], session_id: str) -> str:
-    joined = "|".join(sorted(attributes))
-    msg = (username + "|" + session_id + "|" + joined + "|" + CURRENT_EPOCH).encode("utf-8")
-    digest = hmac.new(MSK, msg, hashlib.sha256).digest()
-    return base64.b64encode(digest).decode("ascii")
+def bridge_health() -> Dict[str, object]:
+    resp = requests.get(_bridge_url("/health"), timeout=5)
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=503, detail="fabeo bridge unavailable")
+    payload = resp.json()
+    if not payload.get("real_cpabe"):
+        raise HTTPException(status_code=503, detail="fabeo bridge not running real cp-abe")
+    return payload
+
+
+def bridge_session_keygen(username: str, attributes: list[str], session_id: str, epoch: str) -> str:
+    resp = requests.post(
+        _bridge_url("/session-keygen"),
+        json={"username": username, "attributes": attributes, "session_id": session_id, "epoch": epoch},
+        headers=_bridge_headers(),
+        timeout=15,
+    )
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=503, detail=resp.json().get("error", "fabeo keygen failed"))
+    return resp.json()["usk_ref"]
+
+
+def bridge_unwrap_dek(usk_ref: str, wrapped_key_b64: str) -> Dict[str, str]:
+    resp = requests.post(
+        _bridge_url("/unwrap-dek"),
+        json={"usk_ref": usk_ref, "wrapped_key_b64": wrapped_key_b64},
+        headers=_bridge_headers(),
+        timeout=20,
+    )
+    if resp.status_code == 403:
+        raise HTTPException(status_code=403, detail=resp.json().get("error", "cp-abe key unwrap failed"))
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=503, detail=resp.json().get("error", "fabeo unwrap failed"))
+    return resp.json()
+
+
+def bridge_public_mpk() -> Dict[str, str]:
+    resp = requests.get(_bridge_url("/public-mpk"), timeout=5)
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=503, detail="fabeo public mpk unavailable")
+    return resp.json()
 
 
 @app.get("/health")
-def health() -> Dict[str, str]:
-    return {"status": "ok", "service": "machs_minimal_kms"}
+def health() -> Dict[str, object]:
+    bridge = bridge_health()
+    return {
+        "status": "ok",
+        "service": "machs_minimal_kms",
+        "bridge_mode": bridge.get("mode"),
+        "bridge_real_cpabe": bridge.get("real_cpabe", False),
+    }
 
 
 @app.get("/public-mpk")
 def public_mpk() -> Dict[str, str]:
-    return {"mpk_b64": MPK, "mode": "fabeo22cp"}
+    return bridge_public_mpk()
 
 
 @app.post("/blind-index", response_model=BlindIndexResponse)
@@ -88,8 +151,14 @@ def blind_index(payload: BlindIndexRequest, _: None = Depends(verify_internal_to
 @app.post("/session-usk", response_model=SessionUskResponse)
 def session_usk(payload: SessionUskRequest, _: None = Depends(verify_internal_token)) -> SessionUskResponse:
     expires = int(time.time()) + 3600
-    usk = derive_usk(payload.username, payload.attributes, payload.session_id)
-    return SessionUskResponse(usk=usk, expires_at_epoch_seconds=expires, issued_epoch=CURRENT_EPOCH)
+    usk_ref = bridge_session_keygen(payload.username, payload.attributes, payload.session_id, payload.epoch)
+    return SessionUskResponse(usk_ref=usk_ref, expires_at_epoch_seconds=expires, issued_epoch=payload.epoch)
+
+
+@app.post("/unwrap-dek", response_model=UnwrapDekResponse)
+def unwrap_dek(payload: UnwrapDekRequest, _: None = Depends(verify_internal_token)) -> UnwrapDekResponse:
+    out = bridge_unwrap_dek(payload.usk_ref, payload.wrapped_key_b64)
+    return UnwrapDekResponse(**out)
 
 
 @app.get("/epoch")

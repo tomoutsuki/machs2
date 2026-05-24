@@ -51,7 +51,7 @@ def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="session expired")
 
     user["session_id"] = session_id
-    user["usk"] = usk.get("usk_ref")
+    user["usk_ref"] = usk.get("usk_ref")
     return user
 
 
@@ -67,7 +67,7 @@ def login(payload: LoginRequest, response: Response) -> LoginResponse:
     session_id = new_session_id()
     attrs = list(user["attributes"])
     usk_out = kms_client.issue_session_usk(user["username"], attrs, session_id)
-    repository.upsert_usk(session_id, user["username"], usk_out["usk"], usk_out["expires_at_epoch_seconds"])
+    repository.upsert_usk(session_id, user["username"], usk_out["usk_ref"], usk_out["expires_at_epoch_seconds"])
 
     token = create_access_token({"sub": user["username"], "sid": session_id})
     response.set_cookie(

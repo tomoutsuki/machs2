@@ -7,15 +7,7 @@ from psycopg2.extras import Json
 from app.db.database import get_cursor
 
 
-SCHEMA_BY_MODE = {
-    "fabeo": "fabeo",
-}
-
-
-def ensure_mode(mode: str) -> str:
-    if mode not in SCHEMA_BY_MODE:
-        raise ValueError("invalid mode")
-    return SCHEMA_BY_MODE[mode]
+ENTRY_SCHEMA = "fabeo"
 
 
 def get_user(username: str) -> Optional[Dict[str, Any]]:
@@ -51,8 +43,7 @@ def get_usk(session_id: str) -> Optional[Dict[str, Any]]:
     return dict(row) if row else None
 
 
-def insert_entry(mode: str, payload: Dict[str, Any]) -> str:
-    schema = ensure_mode(mode)
+def insert_entry(payload: Dict[str, Any]) -> str:
     entry_id = str(uuid.uuid4())
     with get_cursor(commit=True) as cur:
         cur.execute(
@@ -62,7 +53,7 @@ def insert_entry(mode: str, payload: Dict[str, Any]) -> str:
               bidx_name, bidx_cpf, bidx_birthdate, encrypted_payload,
               iv, auth_tag, wrapped_key, wrapped_key_meta, mode_meta
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """.format(schema=schema),
+            """.format(schema=ENTRY_SCHEMA),
             (
                 entry_id,
                 payload["resource_type"],
@@ -83,8 +74,7 @@ def insert_entry(mode: str, payload: Dict[str, Any]) -> str:
     return entry_id
 
 
-def search_entries(mode: str, bidx_name: str, bidx_cpf: str, bidx_birthdate: str) -> List[Dict[str, Any]]:
-    schema = ensure_mode(mode)
+def search_entries(bidx_name: str, bidx_cpf: str, bidx_birthdate: str) -> List[Dict[str, Any]]:
     clauses = []
     params = []
 
@@ -103,7 +93,7 @@ def search_entries(mode: str, bidx_name: str, bidx_cpf: str, bidx_birthdate: str
 
     where = " OR ".join(clauses)
     sql = "SELECT entry_id, resource_type, policy_expression, epoch_label, owner_username, mode_meta, created_at FROM {schema}.entries WHERE {where} ORDER BY created_at DESC".format(
-        schema=schema,
+        schema=ENTRY_SCHEMA,
         where=where,
     )
 
@@ -113,11 +103,10 @@ def search_entries(mode: str, bidx_name: str, bidx_cpf: str, bidx_birthdate: str
     return [dict(r) for r in rows]
 
 
-def get_entry(mode: str, entry_id: str) -> Optional[Dict[str, Any]]:
-    schema = ensure_mode(mode)
+def get_entry(entry_id: str) -> Optional[Dict[str, Any]]:
     with get_cursor() as cur:
         cur.execute(
-            "SELECT * FROM {schema}.entries WHERE entry_id = %s".format(schema=schema),
+            "SELECT * FROM {schema}.entries WHERE entry_id = %s".format(schema=ENTRY_SCHEMA),
             (entry_id,),
         )
         row = cur.fetchone()

@@ -2,7 +2,6 @@ const meEl = document.getElementById("me");
 const createOutEl = document.getElementById("create-out");
 const searchOutEl = document.getElementById("search-out");
 const decryptOutEl = document.getElementById("decrypt-out");
-const MODE = "fabeo";
 
 const samplePatient = {
   resourceType: "Patient",
@@ -50,7 +49,7 @@ document.getElementById("create-entry").addEventListener("click", async () => {
   try {
     const policy = document.getElementById("policy").value;
     const resource = JSON.parse(document.getElementById("resource-json").value);
-    const payload = { mode: MODE, resource };
+    const payload = { resource };
     if (policy.trim()) {
       payload.policy_expression = policy;
     }
@@ -64,7 +63,7 @@ document.getElementById("create-entry").addEventListener("click", async () => {
 
 document.getElementById("search-btn").addEventListener("click", async () => {
   try {
-    const q = new URLSearchParams({ mode: MODE });
+    const q = new URLSearchParams();
     const name = document.getElementById("search-name").value.trim();
     const cpf = document.getElementById("search-cpf").value.trim();
     const birthdate = document.getElementById("search-birthdate").value.trim();
@@ -81,7 +80,7 @@ document.getElementById("search-btn").addEventListener("click", async () => {
 document.getElementById("decrypt-btn").addEventListener("click", async () => {
   try {
     const entryId = document.getElementById("entry-id").value.trim();
-    const out = await api(`/entries/${entryId}/decrypt-package?mode=${MODE}`, { method: "POST" });
+    const out = await api(`/entries/${entryId}/decrypt-package`, { method: "POST" });
     decryptOutEl.textContent = JSON.stringify(out, null, 2);
   } catch (err) {
     decryptOutEl.textContent = String(err.message || err);

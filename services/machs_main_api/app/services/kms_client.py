@@ -25,11 +25,28 @@ def blind_index(field: str, normalized_value: str) -> str:
 def issue_session_usk(username: str, attributes: list[str], session_id: str) -> dict:
     resp = requests.post(
         settings.kms_url + "/session-usk",
-        json={"username": username, "attributes": attributes, "session_id": session_id},
+        json={
+            "username": username,
+            "attributes": attributes,
+            "session_id": session_id,
+            "epoch": settings.current_epoch,
+        },
         headers=_headers(),
         timeout=5,
     )
     resp.raise_for_status()
+    return resp.json()
+
+
+def unwrap_dek(usk_ref: str, wrapped_key_b64: str) -> dict:
+    resp = requests.post(
+        settings.kms_url + "/unwrap-dek",
+        json={"usk_ref": usk_ref, "wrapped_key_b64": wrapped_key_b64},
+        headers=_headers(),
+        timeout=20,
+    )
+    if resp.status_code >= 400:
+        raise ValueError(resp.json().get("detail", "cp-abe key unwrap failed"))
     return resp.json()
 
 
@@ -48,3 +65,13 @@ def rotate_epoch(new_epoch: str) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def assert_kms_ready() -> dict:
+    resp = requests.get(settings.kms_url + "/health", timeout=5)
+    if resp.status_code >= 400:
+        raise RuntimeError("kms unavailable")
+    payload = resp.json()
+    if not payload.get("bridge_real_cpabe"):
+        raise RuntimeError("kms bridge backend is not ready for real cp-abe")
+    return payload

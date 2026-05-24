@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.settings import settings
 from app.routers import auth, entries
+from app.services import fabeo_client, kms_client
 from app.services.seed_loader import deterministic_reset_and_seed
 
 app = FastAPI(title="machs_main_api", version="0.1.0")
@@ -24,6 +25,8 @@ app.mount("/ui", StaticFiles(directory="app/static", html=True), name="ui")
 
 @app.on_event("startup")
 def startup_event() -> None:
+    kms_client.assert_kms_ready()
+    fabeo_client.assert_bridge_ready()
     if settings.reset_on_start:
         deterministic_reset_and_seed()
 
