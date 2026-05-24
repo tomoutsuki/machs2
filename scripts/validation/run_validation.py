@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import dataclasses
 import hashlib
@@ -9,8 +10,10 @@ import os
 import random
 import re
 import statistics
+import subprocess
 import sys
 import time
+from urllib.parse import parse_qs
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -40,6 +43,7 @@ MODES = ["fabeo"]
 SUPPORTED_RESOURCE_TYPES = ["Patient", "Observation", "Condition", "Encounter", "MedicationRequest"]
 DEFAULT_USERS_PATH = Path(__file__).resolve().parents[2] / "resources" / "users_seed.yaml"
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent / "output"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 STAGE_ABE = "abe_functional"
 STAGE_ABAC = "abac_insider"
 STAGE_DB = "db_observer"
@@ -388,7 +392,7 @@ def build_abac_scenarios() -> List[ScenarioDefinition]:
     return [
         ScenarioDefinition(
             name="insider_role_insufficient",
-            user_key="receptionist",
+            user_key="receptionist_frontdesk",
             policy_name="medications_doctor",
             resource_type="MedicationRequest",
             description="insider com papel insuficiente",
@@ -409,7 +413,7 @@ def build_abac_scenarios() -> List[ScenarioDefinition]:
         ),
         ScenarioDefinition(
             name="receptionist_clinical_access",
-            user_key="receptionist",
+            user_key="receptionist_frontdesk",
             policy_name="clinical_notes",
             resource_type="Condition",
             description="recepcionista tentando acessar dado clinico",
@@ -540,18 +544,18 @@ def login(username: str, password: str) -> requests.Session:
     return session
 
 
-def create_entry(session: requests.Session, resource: Dict[str, Any], policy_expression: str, mode: str) -> requests.Response:
+def create_entry(session: requests.Session, resource: Dict[str, Any], policy_expression: str) -> requests.Response:
     response = session.post(
         f"{_base_url()}/entries",
-        json={"mode": mode, "resource": resource, "policy_expression": policy_expression},
+        json={"resource": resource, "policy_expression": policy_expression},
         timeout=_timeout(30),
     )
     response.raise_for_status()
     return response
 
 
-def search_entry(session: requests.Session, mode: str, filtros: Dict[str, str]) -> requests.Response:
-    params = {"mode": mode}
+def search_entry(session: requests.Session, filtros: Dict[str, str]) -> requests.Response:
+    params: Dict[str, str] = {}
     for key in ("name", "cpf", "birthdate"):
         if filtros.get(key):
             params[key] = filtros[key]
@@ -560,33 +564,36 @@ def search_entry(session: requests.Session, mode: str, filtros: Dict[str, str]) 
     return response
 
 
-def get_cipher_metadata(session: requests.Session, entry_id: str, mode: str) -> requests.Response:
+def get_cipher_metadata(session: requests.Session, entry_id: str) -> requests.Response:
     response = session.get(
         f"{_base_url()}/entries/{entry_id}/cipher",
-        params={"mode": mode},
         timeout=_timeout(10),
     )
     response.raise_for_status()
     return response
 
 
-def decrypt_package(session: requests.Session, entry_id: str, mode: str) -> requests.Response:
+def decrypt_package(session: requests.Session, entry_id: str) -> requests.Response:
     response = session.post(
         f"{_base_url()}/entries/{entry_id}/decrypt-package",
-        params={"mode": mode},
         timeout=_timeout(30),
     )
     return response
 
 
-def _decrypt_observed_plaintext(mode: str, response_json: Dict[str, Any]) -> str:
+def _decrypt_observed_plaintext(response_json: Dict[str, Any]) -> str:
     result = response_json.get("result") or {}
-    if mode == "fabeo":
-        plaintext = result.get("resource_json")
-        if not isinstance(plaintext, str):
-            raise ValueError("fabeo decrypt response missing plaintext resource_json")
+    if result.get("flow") != "cp_abe_fabeo_decrypt":
+        raise ValueError("unexpected decrypt flow")
+    if result.get("client_decrypt_required") is not False:
+        raise ValueError("unexpected client decrypt requirement")
+
+    plaintext = result.get("resource_json")
+    if isinstance(plaintext, str):
         return plaintext
-    raise ValueError(f"invalid mode: {mode}")
+    if isinstance(plaintext, (dict, list)):
+        return json.dumps(plaintext, ensure_ascii=False, separators=(",", ":"))
+    raise ValueError("fabeo decrypt response missing plaintext resource_json")
 
 
 def _ensure_mode_selection(mode: str) -> List[str]:
@@ -614,7 +621,7 @@ def _perform_search_if_applicable(session: requests.Session, mode: str, resource
     if not resource.search_filters:
         return None, None
     t0 = time.perf_counter()
-    response = search_entry(session, mode, resource.search_filters)
+    response = search_entry(session, resource.search_filters)
     elapsed = (time.perf_counter() - t0) * 1000.0
     return response, elapsed
 
@@ -716,13 +723,13 @@ def run_abe_functional_validation() -> Dict[str, Any]:
             session, login_ms = _login_user(user)
             record.login_time_ms = login_ms
             create_t0 = time.perf_counter()
-            create_resp = create_entry(session, resource.resource, policy.expression, mode)
+            create_resp = create_entry(session, resource.resource, policy.expression)
             record.create_time_ms = (time.perf_counter() - create_t0) * 1000.0
             record.entry_id = create_resp.json()["entry_id"]
             record.request_payload_bytes = len(json.dumps(resource.resource, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
             cipher_t0 = time.perf_counter()
-            cipher_resp = get_cipher_metadata(session, record.entry_id, mode)
+            cipher_resp = get_cipher_metadata(session, record.entry_id)
             record.cipher_time_ms = (time.perf_counter() - cipher_t0) * 1000.0
             record.cipher_response_bytes = len(cipher_resp.content)
 
@@ -732,7 +739,7 @@ def run_abe_functional_validation() -> Dict[str, Any]:
                 record.search_time_ms = search_ms
 
             decrypt_t0 = time.perf_counter()
-            decrypt_resp = decrypt_package(session, record.entry_id, mode)
+            decrypt_resp = decrypt_package(session, record.entry_id)
             record.decrypt_time_ms = (time.perf_counter() - decrypt_t0) * 1000.0
             record.decrypt_response_bytes = len(decrypt_resp.content)
             record.observed_status = decrypt_resp.status_code
@@ -746,7 +753,7 @@ def run_abe_functional_validation() -> Dict[str, Any]:
             elif decrypt_resp.ok:
                 record.observed_allowed = True
                 payload = decrypt_resp.json()
-                plaintext = _decrypt_observed_plaintext(mode, payload)
+                plaintext = _decrypt_observed_plaintext(payload)
                 record.decrypted_plaintext = plaintext
                 record.original_sha256 = canonical_json_hash(resource.resource)
                 record.recovered_sha256 = canonical_json_hash(json.loads(plaintext))
@@ -931,12 +938,12 @@ def run_single_insider_scenario(scenario: ScenarioDefinition, iterations: int) -
         try:
             session, login_ms = _login_user(user)
             create_t0 = time.perf_counter()
-            create_resp = create_entry(session, resource.resource, policy.expression, "fabeo")
+            create_resp = create_entry(session, resource.resource, policy.expression)
             create_ms = (time.perf_counter() - create_t0) * 1000.0
             entry_id = create_resp.json()["entry_id"]
 
             decrypt_t0 = time.perf_counter()
-            decrypt_resp = decrypt_package(session, entry_id, "fabeo")
+            decrypt_resp = decrypt_package(session, entry_id)
             decrypt_ms = (time.perf_counter() - decrypt_t0) * 1000.0
             observed_status = decrypt_resp.status_code
             if decrypt_resp.status_code == 403:
@@ -945,7 +952,7 @@ def run_single_insider_scenario(scenario: ScenarioDefinition, iterations: int) -
                 observed_allowed = True
                 decrypt_success = True
                 payload = decrypt_resp.json()
-                plaintext = _decrypt_observed_plaintext("fabeo", payload)
+                plaintext = _decrypt_observed_plaintext(payload)
                 original_sha256 = canonical_json_hash(resource.resource)
                 recovered_sha256 = canonical_json_hash(json.loads(plaintext))
                 integrity_ok = original_sha256 == recovered_sha256
@@ -1127,20 +1134,90 @@ def _resolve_entries_tables(cur) -> List[str]:
     return [f"{r[0]}.{r[1]}" for r in rows]
 
 
+def _load_repo_env_map() -> Dict[str, str]:
+    env_map: Dict[str, str] = {}
+    env_path = REPO_ROOT / ".env"
+    if not env_path.exists():
+        return env_map
+    with env_path.open("r", encoding="utf-8") as fh:
+        for raw_line in fh:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            env_map[key.strip()] = value.strip()
+    return env_map
+
+
+def _docker_postgres_setting(key: str, default: str) -> str:
+    return os.getenv(key) or _load_repo_env_map().get(key) or default
+
+
+def _run_docker_psql(sql: str) -> subprocess.CompletedProcess[str]:
+    postgres_user = _docker_postgres_setting("POSTGRES_USER", "machs2")
+    postgres_db = _docker_postgres_setting("POSTGRES_DB", "machs2")
+    command = [
+        "docker",
+        "compose",
+        "exec",
+        "-T",
+        "machs_postgresql",
+        "psql",
+        "-U",
+        postgres_user,
+        "-d",
+        postgres_db,
+        "-At",
+        "-F",
+        "\t",
+        "-c",
+        sql,
+    ]
+    return subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+
+def _resolve_entries_tables_fallback() -> List[str]:
+    result = _run_docker_psql("SELECT to_regclass('fabeo.entries')::text;")
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "docker psql lookup failed")
+    table_name = result.stdout.strip()
+    return [table_name] if table_name and table_name != "null" else []
+
+
+def _fetch_entry_row_fallback(table_name: str, entry_id: str) -> Optional[Tuple[str, str, bytes]]:
+    sql = (
+        "SELECT entry_id::text, resource_type, encode(encrypted_payload, 'base64') "
+        f"FROM {table_name} WHERE entry_id = '{entry_id}'::uuid;"
+    )
+    result = _run_docker_psql(sql)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "docker psql row fetch failed")
+    output = result.stdout.strip()
+    if not output:
+        return None
+    parts = output.split("\t")
+    if len(parts) != 3:
+        raise RuntimeError(f"unexpected docker psql row format: {output}")
+    return parts[0], parts[1], base64.b64decode(parts[2].encode("ascii"))
+
+
 def run_db_observer_validation() -> Dict[str, Any]:
+    import observer_validation as _observer_validation
+
+    _observer_validation.rv.STATE = STATE
+    return _observer_validation.run_db_observer_validation()
+
     if STATE is None:
         raise RuntimeError("validation state not initialized")
     _log(f"DB observer validation start: iterations={STATE.config.iterations}")
-    if DB_BACKEND is None:
-        return {
-            "total_rows_checked": 0,
-            "plaintext_rows_detected": 0,
-            "plaintext_detection_rate": 0.0,
-            "validation_passed": False,
-            "error": "database driver not available",
-            "artifacts": {},
-        }
-    if not STATE.config.db_dsn:
+    if DB_BACKEND is not None and not STATE.config.db_dsn:
         return {
             "total_rows_checked": 0,
             "plaintext_rows_detected": 0,
@@ -1171,7 +1248,7 @@ def run_db_observer_validation() -> Dict[str, Any]:
             session, login_ms = _login_user(STATE.users["doctor_general_clinic"])
             create_t0 = time.perf_counter()
             policy = next(item for item in STATE.policies if item.name == "patient_demographics")
-            create_resp = create_entry(session, resource.resource, policy.expression, "fabeo")
+            create_resp = create_entry(session, resource.resource, policy.expression)
             create_ms = (time.perf_counter() - create_t0) * 1000.0
             entry_id = create_resp.json()["entry_id"]
             created_entries.append((entry_id, resource.resource_type))
@@ -1215,46 +1292,25 @@ def run_db_observer_validation() -> Dict[str, Any]:
         finally:
             create_bar.update(1)
 
-    try:
-        if DB_BACKEND == "psycopg2":
-            conn = psycopg2.connect(STATE.config.db_dsn)
-        else:
-            conn = psycopg.connect(STATE.config.db_dsn)
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "total_rows_checked": 0,
-            "plaintext_rows_detected": 0,
-            "plaintext_detection_rate": 0.0,
-            "validation_passed": False,
-            "error": f"db connection failed: {exc}",
-            "artifacts": {},
-        }
-    try:
-        with conn.cursor() as cur:
-            tables = _resolve_entries_tables(cur)
-        if not tables:
-            error_count += 1
-            validation_passed = False
-            artifacts = {}
-            return {
-                "total_rows_checked": 0,
-                "plaintext_rows_detected": 0,
-                "plaintext_detection_rate": 0.0,
-                "validation_passed": validation_passed,
-                "error": "entries table not found",
-                "artifacts": artifacts,
-            }
-        table_name = tables[0]
-        check_bar = ProgressBar(len(created_entries), "DB observer check")
-        with conn.cursor() as cur:
+    if DB_BACKEND is None:
+        try:
+            tables = _resolve_entries_tables_fallback()
+            if not tables:
+                return {
+                    "total_rows_checked": 0,
+                    "plaintext_rows_detected": 0,
+                    "plaintext_detection_rate": 0.0,
+                    "validation_passed": False,
+                    "error": "entries table not found",
+                    "artifacts": {},
+                }
+
+            table_name = tables[0]
+            check_bar = ProgressBar(len(created_entries), "DB observer check")
             for entry_id, resource_type in created_entries:
                 context = attempt_context.get(entry_id, {})
                 check_t0 = time.perf_counter()
-                cur.execute(
-                    f"SELECT entry_id, resource_type, encrypted_payload FROM {table_name} WHERE entry_id = %s",
-                    (entry_id,),
-                )
-                row = cur.fetchone()
+                row = _fetch_entry_row_fallback(table_name, entry_id)
                 db_check_ms = (time.perf_counter() - check_t0) * 1000.0
                 if not row:
                     error_count += 1
@@ -1288,9 +1344,8 @@ def run_db_observer_validation() -> Dict[str, Any]:
                     })
                     check_bar.update(1)
                     continue
-                row_entry_id = row[0]
-                row_resource_type = row[1]
-                encrypted_payload = row[2]
+
+                row_entry_id, row_resource_type, encrypted_payload = row
                 payload_bytes = _payload_to_bytes(encrypted_payload)
                 payload_bytes_len = len(payload_bytes)
                 detect = detect_plaintext_json_in_encrypted_payload(payload_bytes)
@@ -1323,8 +1378,124 @@ def run_db_observer_validation() -> Dict[str, Any]:
                     "decrypt_response_bytes": None,
                 })
                 check_bar.update(1)
-    finally:
-        conn.close()
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "total_rows_checked": 0,
+                "plaintext_rows_detected": 0,
+                "plaintext_detection_rate": 0.0,
+                "validation_passed": False,
+                "error": f"db observer failed: {exc}",
+                "artifacts": {},
+            }
+    else:
+        try:
+            if DB_BACKEND == "psycopg2":
+                conn = psycopg2.connect(STATE.config.db_dsn)
+            else:
+                conn = psycopg.connect(STATE.config.db_dsn)
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "total_rows_checked": 0,
+                "plaintext_rows_detected": 0,
+                "plaintext_detection_rate": 0.0,
+                "validation_passed": False,
+                "error": f"db connection failed: {exc}",
+                "artifacts": {},
+            }
+        try:
+            with conn.cursor() as cur:
+                tables = _resolve_entries_tables(cur)
+            if not tables:
+                error_count += 1
+                return {
+                    "total_rows_checked": 0,
+                    "plaintext_rows_detected": 0,
+                    "plaintext_detection_rate": 0.0,
+                    "validation_passed": False,
+                    "error": "entries table not found",
+                    "artifacts": {},
+                }
+            table_name = tables[0]
+            check_bar = ProgressBar(len(created_entries), "DB observer check")
+            with conn.cursor() as cur:
+                for entry_id, resource_type in created_entries:
+                    context = attempt_context.get(entry_id, {})
+                    check_t0 = time.perf_counter()
+                    cur.execute(
+                        f"SELECT entry_id, resource_type, encrypted_payload FROM {table_name} WHERE entry_id = %s",
+                        (entry_id,),
+                    )
+                    row = cur.fetchone()
+                    db_check_ms = (time.perf_counter() - check_t0) * 1000.0
+                    if not row:
+                        error_count += 1
+                        rows_out.append({
+                            "table_name": table_name,
+                            "entry_id": entry_id,
+                            "resource_type": resource_type,
+                            "encrypted_payload_size_bytes": None,
+                            "looks_like_json": False,
+                            "json_parse_success": False,
+                            "contains_fhir_markers": False,
+                            "plaintext_detected": False,
+                            "detected_markers": "",
+                            "check_latency_ms": db_check_ms,
+                            "error_message": "entry not found in table",
+                        })
+                        raw_metrics.append({
+                            "attempt_id": context.get("attempt_id", "db_observer-missing"),
+                            "validation_stage": STAGE_DB,
+                            "scenario": STAGE_DB,
+                            "latency_login_ms": context.get("login_ms"),
+                            "latency_create_ms": context.get("create_ms"),
+                            "latency_search_ms": None,
+                            "latency_decrypt_ms": None,
+                            "latency_db_check_ms": db_check_ms,
+                            "total_attempt_latency_ms": (time.perf_counter() - context.get("attempt_start", check_t0)) * 1000.0,
+                            "original_payload_bytes": context.get("original_payload_bytes"),
+                            "encrypted_payload_bytes": None,
+                            "cipher_metadata_response_bytes": None,
+                            "decrypt_response_bytes": None,
+                        })
+                        check_bar.update(1)
+                        continue
+                    row_entry_id = row[0]
+                    row_resource_type = row[1]
+                    encrypted_payload = row[2]
+                    payload_bytes = _payload_to_bytes(encrypted_payload)
+                    payload_bytes_len = len(payload_bytes)
+                    detect = detect_plaintext_json_in_encrypted_payload(payload_bytes)
+                    rows_out.append({
+                        "table_name": table_name,
+                        "entry_id": str(row_entry_id),
+                        "resource_type": row_resource_type,
+                        "encrypted_payload_size_bytes": payload_bytes_len,
+                        "looks_like_json": detect["looks_like_json"],
+                        "json_parse_success": detect["json_parse_success"],
+                        "contains_fhir_markers": detect["contains_fhir_markers"],
+                        "plaintext_detected": detect["plaintext_detected"],
+                        "detected_markers": detect["detected_markers"],
+                        "check_latency_ms": db_check_ms,
+                        "error_message": "",
+                    })
+                    raw_metrics.append({
+                        "attempt_id": context.get("attempt_id", "db_observer-{0}".format(entry_id)),
+                        "validation_stage": STAGE_DB,
+                        "scenario": STAGE_DB,
+                        "latency_login_ms": context.get("login_ms"),
+                        "latency_create_ms": context.get("create_ms"),
+                        "latency_search_ms": None,
+                        "latency_decrypt_ms": None,
+                        "latency_db_check_ms": db_check_ms,
+                        "total_attempt_latency_ms": (time.perf_counter() - context.get("attempt_start", check_t0)) * 1000.0,
+                        "original_payload_bytes": context.get("original_payload_bytes"),
+                        "encrypted_payload_bytes": payload_bytes_len,
+                        "cipher_metadata_response_bytes": None,
+                        "decrypt_response_bytes": None,
+                    })
+                    check_bar.update(1)
+        finally:
+            conn.close()
 
     total_rows_checked = len(rows_out)
     plaintext_rows_detected = sum(1 for row in rows_out if row.get("plaintext_detected"))
@@ -1801,7 +1972,49 @@ def _build_report(abe: Dict[str, Any], abac: Dict[str, Any], db_observer: Dict[s
 
 
 def _load_db_dsn_from_env() -> Optional[str]:
-    return os.getenv("DATABASE_DSN") or os.getenv("POSTGRES_DSN") or os.getenv("VALIDATION_DB_DSN")
+    raw = os.getenv("DATABASE_DSN") or os.getenv("POSTGRES_DSN") or os.getenv("VALIDATION_DB_DSN")
+    if raw:
+        return _normalize_db_dsn(raw)
+
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    if not env_path.exists():
+        return None
+
+    with env_path.open("r", encoding="utf-8") as fh:
+        for raw_line in fh:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.strip() in {"DATABASE_DSN", "POSTGRES_DSN", "VALIDATION_DB_DSN"}:
+                return _normalize_db_dsn(value.strip())
+    return None
+
+
+def _normalize_db_dsn(value: str) -> str:
+    raw = value.strip()
+    if not raw:
+        return raw
+    if "=" in raw or raw.startswith("postgres://") or raw.startswith("postgresql://"):
+        return raw
+
+    match = re.match(r"^(?P<host>[^:/?]+)(?::(?P<port>\d+))?/(?P<db>[^?]+)(?:\?(?P<query>.*))?$", raw)
+    if not match:
+        return raw
+
+    params = {
+        "host": match.group("host"),
+        "port": match.group("port") or "5432",
+        "dbname": match.group("db"),
+    }
+    query = match.group("query") or ""
+    parsed = parse_qs(query, keep_blank_values=True)
+    if parsed.get("user"):
+        params["user"] = parsed["user"][0]
+    if parsed.get("password"):
+        params["password"] = parsed["password"][0]
+
+    return " ".join(f"{key}={value}" for key, value in params.items() if value)
 
 
 def parse_args(argv: Optional[List[str]] = None) -> ValidationConfig:
@@ -1819,7 +2032,7 @@ def parse_args(argv: Optional[List[str]] = None) -> ValidationConfig:
         mode=args.mode,
         out_dir=Path(args.out_dir),
         seed=args.seed,
-        db_dsn=args.db_dsn or _load_db_dsn_from_env(),
+        db_dsn=_normalize_db_dsn(args.db_dsn) if args.db_dsn else _load_db_dsn_from_env(),
     )
 
 
