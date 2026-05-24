@@ -1,177 +1,184 @@
-# MACHS2 Architecture (Local MVP)
+# Arquitetura do MACHS2
 
-## 1. Purpose and Scope
+## Objetivo
 
-MACHS2 is a local research MVP to validate FABEO-based ABAC while preserving HL7 FHIR R5 JSON payload semantics.
+Descrever a arquitetura executável do MACHS2 no estado atual do repositório, com ênfase em containers, dependências, fronteiras de confiança e fluxo de chamadas entre os serviços.
 
-The project is intentionally modular:
+## Visão geral
 
-- one API service for auth, policy checks, and orchestration
-- one minimal KMS for key-related derivations
-- one FABEO bridge service for CP-ABE related operations
-- one PostgreSQL service for storage
+O `docker-compose.yml` sobe quatro containers principais:
 
-The system favors reproducibility over production hardening.
+| Container | Tecnologia | Porta host | Papel principal |
+| --- | --- | --- | --- |
+| `machs_main_api` | FastAPI + Uvicorn | `8000` | API pública, autenticação, orquestração, busca, metadados e `decrypt-package` |
+| `machs_minimal_kms` | FastAPI + Uvicorn | `8100` | Derivação de blind index, emissão de `usk_ref`, proxy de `public-mpk`, unwrap de DEK e epoch experimental |
+| `machs_fabeo_service` | Ubuntu 16.04 + Python 2.7 + Charm + FABEO | `8200` | Runtime CP-ABE, validação de política, encapsulamento da DEK e unwrap autorizado |
+| `machs_postgresql` | PostgreSQL 16 | `5432` | Persistência de usuários, sessões, exemplos de política e entradas cifradas |
 
-## 2. Container Topology
+## Papel de cada serviço
 
-Docker Compose defines four services connected on a single bridge network (`machs_network`).
+### 1. Main API
 
-### 2.1 `machs_main_api` (FastAPI, Python 3)
+Implementada em `services/machs_main_api/app`.
 
-- External port: `8000`
-- Responsibilities:
-	- user authentication (pre-seeded users)
-	- issue/validate session cookie (JWT)
-	- create/search/read/decrypt-package endpoints
-	- policy normalization/evaluation
-	- FABEO encryption orchestration
-- Dependencies: PostgreSQL, KMS, FABEO bridge (via `depends_on` health checks)
-- Mounted volume: `./resources` (read-only) for deterministic startup seeding
+Responsabilidades observadas no código:
 
-### 2.2 `machs_minimal_kms` (FastAPI, Python 3)
+- expor endpoints públicos HTTP;
+- autenticar usuários pré-semeados;
+- emitir JWT e cookie HTTP-only;
+- solicitar ao KMS a emissão de uma referência de USK por sessão;
+- validar superficialmente recursos FHIR;
+- derivar campos pesquisáveis;
+- solicitar blind indexes ao KMS;
+- solicitar encapsulamento da DEK ao bridge FABEO;
+- cifrar o payload com `AES-GCM`;
+- persistir ciphertext e metadados no PostgreSQL;
+- buscar metadados por blind index;
+- solicitar ao KMS o unwrap da DEK durante `decrypt-package`;
+- devolver o plaintext ao cliente autorizado.
 
-- External port: `8100`
-- Responsibilities:
-	- derive blind indexes (`HMAC(MQK, field|normalized_value)`)
-	- derive per-session USK references (`HMAC(MSK, username|session_id|attrs|epoch)`)
-	- expose current epoch and optional epoch rotation
-	- expose MPK as a public endpoint
-- Access control for sensitive endpoints: `x-internal-token` header
+### 2. Minimal KMS
 
-### 2.3 `machs_fabeo_service` (FABEO image + mounted bridge)
+Implementado em `services/machs_minimal_kms/app/main.py`.
 
-- External port: `8200`
-- Runtime command: Python 2 bridge script at `/opt/machs2/bridge/server.py`
-- Responsibilities:
-	- validate policy strings
-	- encrypt/decrypt payloads for `fabeo` mode
-- Current MVP behavior: deterministic simulation envelope when `FABEO_ALLOW_SIMULATION=true`
+Responsabilidades observadas:
 
-### 2.4 `machs_postgresql` (PostgreSQL 16)
+- custodiar a MQK em memória de processo, carregada por variável de ambiente;
+- derivar blind indexes por `HMAC-SHA256`;
+- encaminhar a geração de sessão CP-ABE ao bridge FABEO;
+- devolver somente uma referência `usk_ref` para a Main API;
+- encaminhar unwrap de DEK ao bridge FABEO;
+- expor a MPK publicamente;
+- manter um `CURRENT_EPOCH` próprio para rotação experimental.
 
-- External port: `5432`
-- Responsibilities:
-	- users and session references
-	- policy examples
-	- encrypted entries stored in `fabeo.entries`
-- Initialization scripts loaded from `db/init`
+### 3. FABEO Bridge
 
-## 3. Inter-Module Communication
+Implementado em `services/machs_fabeo_bridge/server.py` e montado por volume dentro do container `machs_fabeo_service`.
 
-### 3.1 High-level communication matrix
+Responsabilidades observadas:
 
-- Browser/UI -> Main API: public HTTP endpoints (`/auth`, `/entries`, `/health`, `/ui`)
-- Main API -> PostgreSQL: psycopg2 DSN connection
-- Main API -> KMS: HTTP calls to `/blind-index`, `/session-usk`, `/epoch`, `/rotate-epoch` with internal token
-- Main API -> FABEO bridge: HTTP calls to `/validate-policy`, `/encrypt`, `/decrypt`
-- KMS/FABEO -> Main API: no callback path; strictly request/response
+- inicializar `PairingGroup('MNT224')` e `FABEO22CPABE`;
+- normalizar e validar políticas ABAC;
+- gerar chaves de sessão por atributos;
+- encapsular um segredo GT para derivar a DEK;
+- serializar o ciphertext CP-ABE;
+- guardar as chaves de sessão em memória do processo (`SESSION_KEYS`);
+- realizar unwrap autorizado da DEK a partir do `usk_ref`.
 
-### 3.2 Startup and readiness chain
+Importante: o código inspecionado implementa um fluxo CP-ABE real no bridge. Não foi identificada, no arquivo atual `server.py`, uma ramificação ativa de "envelope determinístico simulado" para criptografia local; esse ponto aparece em documentação legada do repositório, mas não como lógica operacional atual do bridge.
 
-1. PostgreSQL becomes healthy (`pg_isready`).
-2. KMS health endpoint responds (`/health`).
-3. FABEO bridge health endpoint responds (`/health`).
-4. Main API starts and, if enabled, runs deterministic reset+seed on startup.
+### 4. PostgreSQL
 
-## 4. End-to-End Data Flows
+Inicializado com scripts em `db/init`.
 
-### 4.1 Login flow
+Responsabilidades observadas:
 
-1. Client posts credentials to `/auth/login`.
-2. Main API verifies bcrypt password hash from `public.users`.
-3. Main API requests session USK from KMS (`/session-usk`).
-4. Main API stores USK reference in `public.session_usk` with expiration.
-5. Main API issues JWT and writes HTTP-only cookie.
+- armazenar usuários em `public.users`;
+- armazenar referências de sessão em `public.session_usk`;
+- armazenar exemplos de políticas em `public.policy_examples`;
+- armazenar entradas cifradas em `fabeo.entries`.
 
-### 4.2 Create entry flow
+## Dependências e ordem de subida
 
-1. Validate FHIR payload shape and supported `resourceType`.
-2. Normalize and extract searchable fields (name, CPF, birthdate for Patient).
-3. Request blind indexes from KMS for each available normalized field.
-4. Encrypt payload using FABEO.
-5. Insert encrypted row into `fabeo.entries`.
+Dependências declaradas em `docker-compose.yml`:
 
-### 4.3 Search flow
+- `machs_main_api` depende de:
+  - `machs_postgresql` saudável;
+  - `machs_minimal_kms` saudável;
+  - `machs_fabeo_service` saudável.
+- `machs_main_api` também valida KMS e bridge em `startup_event()`.
+- `machs_main_api` pode executar reset determinístico no startup quando `MAIN_API_RESET_ON_START=true`.
 
-1. Normalize search inputs.
-2. Derive blind indexes via KMS.
-3. Query `fabeo.entries` by blind index columns (`OR` combination).
-4. Return metadata only (no plaintext payload).
+## Comunicação entre módulos
 
-### 4.4 Decrypt-package flow
+### Fluxo de alto nível
 
-1. Load row from `fabeo.entries`.
-2. Check epoch staleness when experimental revocation is enabled.
-3. Evaluate policy expression against authenticated user attributes.
-4. If authorized, return plaintext JSON in `result.resource_json`.
+1. O cliente acessa `machs_main_api`.
+2. A Main API autentica o usuário contra `public.users`.
+3. No login, a Main API solicita `session-usk` ao Minimal KMS.
+4. O Minimal KMS chama `session-keygen` no FABEO Bridge.
+5. O bridge gera a chave de sessão CP-ABE e guarda o material em memória, retornando apenas `usk_ref`.
+6. Na criação de entrada, a Main API:
+   - valida a política com o bridge;
+   - deriva blind indexes com o KMS;
+   - encapsula a DEK com o bridge;
+   - cifra o payload com `AES-GCM`;
+   - grava tudo no PostgreSQL.
+7. Na leitura autorizada, a Main API:
+   - busca a linha em `fabeo.entries`;
+   - envia `usk_ref` e `wrapped_key_b64` ao KMS;
+   - o KMS chama o bridge para unwrap CP-ABE;
+   - a Main API usa a DEK retornada para descriptografar e responder.
 
-## 5. Storage Model
+## Fronteiras de confiança
 
-## 5.1 Public schema
+### Componentes tratados como confiáveis pelo MVP
 
-- `public.users`: predefined users, role, bcrypt hash, attributes JSONB
-- `public.session_usk`: session-bound USK reference with expiration
-- `public.policy_examples`: policy catalog exposed by API
+- Main API
+- Minimal KMS
+- FABEO Bridge
 
-## 5.2 FABEO schema
+### Componentes tratados como não confiáveis para confidencialidade do plaintext
 
-The `fabeo` schema contains a single `entries` table.
+- PostgreSQL, em especial para observador apenas de banco
 
-Common columns in `fabeo.entries`:
+### Consequência prática
 
-- `entry_id` (UUID, PK)
-- `resource_type`
-- `policy_expression`
-- `epoch_label`
-- `owner_username`
-- `bidx_name`, `bidx_cpf`, `bidx_birthdate` (blind-index fields)
-- `encrypted_payload` (BYTEA)
-- `mode_meta` (JSONB)
-- timestamps (`created_at`, `updated_at`)
+O modelo do MVP protege o payload FHIR contra observação direta no banco e contra usuários autenticados sem atributos suficientes para satisfazer a política, mas ainda assume confiança nos processos de aplicação que manipulam plaintext em memória e na resposta HTTP autorizada.
 
-Indexes exist for blind-index columns, resource type, and created-at.
+## Implementação dos containers
 
-## 6. Cryptographic Behavior in This MVP
+### `machs_main_api`
 
-- Encryption/decryption delegated to FABEO bridge service.
-- Bridge validates policy syntax and enforces attribute checks on decrypt.
-- In current local setup, payload is wrapped in deterministic simulation envelope for reproducibility.
+- Base `python:3.11-slim`
+- Instala `curl` para healthcheck
+- Executa `uvicorn app.main:app --host 0.0.0.0 --port 8000`
 
-## 7. Policy and Attribute Engine
+### `machs_minimal_kms`
 
-Policy syntax accepts only token format:
+- Base `python:3.11-slim`
+- Instala `curl` para healthcheck
+- Executa `uvicorn app.main:app --host 0.0.0.0 --port 8100`
 
-- attribute token: `namespace.value` (for example `role.doctor`)
-- operators: `AND`, `OR`
-- parentheses are accepted in input but evaluation is linearized after normalization
-- forbidden syntax: `=` and `:`
+### `machs_fabeo_service`
 
-Decryption authorization always checks policy against user attributes in the authenticated session context.
+- Base `ubuntu:16.04`
+- Instala Python 2.7, Charm 0.43, GMP, PBC e o upstream FABEO
+- O entrypoint operacional do MACHS2 não executa o servidor upstream do projeto FABEO; executa o bridge local montado em `/opt/machs2/bridge/server.py`
 
-## 8. Revocation Model (Experimental)
+### `machs_postgresql`
 
-- Controlled by `MAIN_API_ENABLE_EXPERIMENTAL_REVOCATION`.
-- Entries carry `epoch_label` at write time.
-- If current epoch differs from row epoch, decrypt-package is denied (`403`) with stale-epoch message.
-- Rotation endpoint is guarded by role and feature flag.
+- Base `postgres:16`
+- Monta:
+  - `./db/init` em `/docker-entrypoint-initdb.d`
+  - `./resources` em `/workspace/resources:ro`
 
-This is a research simulation of revocation semantics, not full production key-rotation infrastructure.
+## Diagrama geral
 
-## 9. Deterministic Seeding and Reproducibility
+```mermaid
+flowchart LR
+    Client["Cliente HTTP / UI estática"]
+    MainAPI["machs_main_api\nFastAPI :8000"]
+    KMS["machs_minimal_kms\nFastAPI :8100"]
+    FABEO["machs_fabeo_service\nbridge Python 2.7 :8200"]
+    DB["machs_postgresql\nPostgreSQL 16 :5432"]
+    Seeds["resources/\nusers_seed.yaml + FHIR seeds"]
+    InitSQL["db/init/*.sql"]
 
-When `MAIN_API_RESET_ON_START=true`:
+    Client -->|/auth, /entries, /ui| MainAPI
+    MainAPI -->|SQL| DB
+    MainAPI -->|HTTP interno| KMS
+    MainAPI -->|HTTP interno| FABEO
+    KMS -->|HTTP interno| FABEO
+    Seeds -->|mount ro| MainAPI
+    Seeds -->|mount ro| DB
+    InitSQL -->|bootstrap inicial| DB
+```
 
-1. all entries in `fabeo.entries` are cleared
-2. all session references are cleared
-3. users from `resources/users_seed.yaml` are upserted
-4. resource seed files are encrypted and inserted in `fabeo` only
+## Observações arquiteturais relevantes
 
-This ensures repeatable behavior for demos, benchmarks, and integration scripts.
-
-## 10. Architectural Limitations
-
-- FABEO service remains tied to Python 2 bridge/runtime compatibility constraints.
-- Policy evaluator is intentionally simplified for MVP.
-- Full FHIR profile validation is out of scope (baseline checks only).
-- KMS is minimal and intentionally not HSM-backed.
+- A arquitetura sugere extensibilidade para múltiplos modos criptográficos, mas o repositório está operacionalmente fixado em `fabeo`.
+- O bridge FABEO funciona como runtime CP-ABE embutido no container de um projeto upstream mais antigo, o que introduz dependências legadas fortes.
+- O estado das chaves de sessão CP-ABE fica em memória do bridge, não no PostgreSQL.
+- O endpoint `/entries/{entry_id}/cipher` devolve metadados, não os bytes do ciphertext.
+- Busca e metadados são separados da autorização forte de descriptografia; a restrição ABAC é aplicada de fato no unwrap CP-ABE durante `decrypt-package`.

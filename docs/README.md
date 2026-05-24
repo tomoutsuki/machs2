@@ -47,7 +47,3 @@ Embora a proposta acadêmica mencione múltiplos modos criptográficos, o códig
 - Escrita para o MVP local, não para produção.
 - Sem reproduzir segredos, tokens internos ou senhas do seed.
 - Com destaque explícito para lacunas, comportamento experimental e inconsistências entre intenção arquitetural e implementação efetiva.
-
-## Observação sobre documentos legados
-
-O repositório já possuía alguns arquivos em `/docs` anteriores a esta documentação, como `api.md`, `benchmarking.md` e `threat-model.md`. Eles podem servir como material histórico complementar, mas os documentos desta coleção foram organizados para refletir de forma mais sistemática o estado atual do código inspecionado.
