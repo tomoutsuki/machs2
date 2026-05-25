@@ -74,7 +74,7 @@ Uso no código:
 
 Observações:
 
-- não há chave estrangeira para `public.users`;
+- há chave estrangeira `session_usk_username_fkey` para `public.users(username)`, com `ON UPDATE CASCADE`;
 - o logout não apaga esta tabela;
 - o reset determinístico a limpa.
 
@@ -252,13 +252,12 @@ erDiagram
         TIMESTAMPTZ updated_at
     }
 
-    users ||--o{ session_usk : "username lógico"
-    users ||--o{ fabeo_entries : "owner_username lógico"
+    users ||--o{ session_usk : "FK username"
+    users ||--o{ fabeo_entries : "FK owner_username"
 ```
 
 ## Limitações do modelo de dados
 
-- Não há foreign keys explícitas entre `users`, `session_usk` e `fabeo.entries`.
 - Não há tabela de auditoria para tentativas de decrypt.
 - Não há versionamento de policies nem histórico de epoch por entrada além do `epoch_label` textual.
 - A função SQL `create_mode_table()` é genérica, mas foi invocada apenas para `fabeo`.

@@ -18,7 +18,11 @@ CREATE TABLE IF NOT EXISTS public.session_usk (
   username TEXT NOT NULL,
   usk_ref TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT session_usk_username_fkey
+    FOREIGN KEY (username)
+    REFERENCES public.users (username)
+    ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS public.policy_examples (
@@ -49,8 +53,12 @@ BEGIN
       wrapped_key_meta JSONB,
       mode_meta JSONB NOT NULL DEFAULT ''{}''::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )', schema_name
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT %I_entries_owner_username_fkey
+        FOREIGN KEY (owner_username)
+        REFERENCES public.users (username)
+        ON UPDATE CASCADE
+    )', schema_name, schema_name
   );
 
   EXECUTE format('CREATE INDEX IF NOT EXISTS %I_entries_bidx_name_idx ON %I.entries (bidx_name)', schema_name, schema_name);
@@ -62,5 +70,39 @@ END;
 $$ LANGUAGE plpgsql;
 
 SELECT create_mode_table('fabeo');
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'session_usk_username_fkey'
+      AND conrelid = 'public.session_usk'::regclass
+  ) THEN
+    ALTER TABLE public.session_usk
+      ADD CONSTRAINT session_usk_username_fkey
+      FOREIGN KEY (username)
+      REFERENCES public.users (username)
+      ON UPDATE CASCADE;
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF to_regclass('fabeo.entries') IS NOT NULL AND NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'fabeo_entries_owner_username_fkey'
+      AND conrelid = 'fabeo.entries'::regclass
+  ) THEN
+    ALTER TABLE fabeo.entries
+      ADD CONSTRAINT fabeo_entries_owner_username_fkey
+      FOREIGN KEY (owner_username)
+      REFERENCES public.users (username)
+      ON UPDATE CASCADE;
+  END IF;
+END;
+$$;
 
 DROP FUNCTION create_mode_table(TEXT);
